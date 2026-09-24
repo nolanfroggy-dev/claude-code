@@ -194,10 +194,23 @@
     padding: 10px 18px; text-align: center; line-height: 1.4; pointer-events: none;
   }
   #tip b { font-family: var(--display); font-weight: normal; font-size: calc(22px * var(--dscale)); display: block; color: var(--hot); }
-  #touchHint { position: fixed; inset: 0; pointer-events: none; display: grid; grid-template-rows: 1fr 1fr; }
-  #touchHint > div { display: grid; place-items: center; }
-  #touchHint .lower { border-top: 3px dashed var(--line); background: color-mix(in srgb, var(--accent) 16%, transparent); }
-  #touchHint span { padding: 8px 14px; font-weight: 800; }
+  /* Touch controls: tap anywhere jumps; hold this button (or swipe down) to duck. */
+  #duckBtn {
+    position: fixed;
+    left: calc(16px + env(safe-area-inset-left, 0px));
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    width: 84px; height: 84px; padding: 0;
+    display: grid; place-items: center; align-content: center; gap: 2px;
+    font-family: var(--display); font-size: calc(16px * var(--dscale));
+    cursor: pointer;
+    touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
+  }
+  #duckBtn svg { width: 28px; height: 28px; }
+  #duckBtn.active { background: var(--accent); color: var(--on-accent); transform: translateY(2px); }
+  #touchHint { position: fixed; inset: 0; pointer-events: none; }
+  #touchHint span { position: absolute; padding: 8px 14px; font-weight: 800; text-align: center; }
+  #touchHint .jump { left: 50%; top: 40%; transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px); }
+  #touchHint .duck { left: calc(16px + env(safe-area-inset-left, 0px)); bottom: calc(112px + env(safe-area-inset-bottom, 0px)); }
   @media (prefers-reduced-motion: reduce) {
     @keyframes bannerIn { 0% { opacity: 0; } 10% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
     .play { transition: none; }
@@ -231,9 +244,13 @@
 </div>
 
 <div id="tip" class="panel" hidden></div>
+<button id="duckBtn" class="panel" type="button" aria-label="Duck (hold)" hidden>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6l7 6 7-6M5 13l7 6 7-6"/></svg>
+  <span>Duck</span>
+</button>
 <div id="touchHint" hidden>
-  <div><span class="panel">Tap up here to jump</span></div>
-  <div class="lower"><span class="panel">Hold down here to duck</span></div>
+  <span class="panel jump">Tap anywhere to jump</span>
+  <span class="panel duck">Hold to duck &darr;</span>
 </div>
 <div id="banner" hidden><div class="card panel"><div class="big" id="bannerBig">LEVEL 2</div><div class="sub" id="bannerSub">Forge</div><div class="tip" id="bannerTip"></div></div></div>
 
@@ -243,8 +260,8 @@
     <p class="lede">Jump the spikes, dodge the saws and duck under low ceilings. Survive 80 seconds without crashing and a portal warps you to the next zone, drawn in a completely different style. Every zone runs faster and adds a new obstacle. A crash restarts the current zone's 80-second clock.</p>
     <ul class="zones" id="zoneList"></ul>
     <p class="controls">
-      <span><kbd>Space</kbd> <kbd>&uarr;</kbd> <kbd>W</kbd> or tap the top half: jump (hold to keep jumping)</span>
-      <span><kbd>&darr;</kbd> <kbd>S</kbd>, hold the bottom half or swipe down: duck</span>
+      <span><kbd>Space</kbd> <kbd>&uarr;</kbd> <kbd>W</kbd>, click or tap anywhere: jump (hold to keep jumping)</span>
+      <span><kbd>&darr;</kbd> <kbd>S</kbd>, or on a touchscreen hold the Duck button or swipe down: duck</span>
       <span>Tap inside yellow orbs to jump mid-air</span>
       <span><kbd>P</kbd> pause</span>
       <span><kbd>M</kbd> sound</span>
@@ -1483,7 +1500,7 @@
   }
 
   const TIPS = {
-    duck: "<b>Duck!</b>Hold &darr; or S. On a touchscreen, hold the bottom half of the screen or swipe down.",
+    duck: "<b>Duck!</b>Hold &darr; or S. On a touchscreen, hold the Duck button in the bottom-left corner or swipe down.",
     flip: "<b>Gravity flip!</b>You'll run on the ceiling until the next portal. Jumping still works, just upside down.",
   };
   let tipTimer = 0;
@@ -1790,6 +1807,8 @@
     setText("best", hudEls.best, String(bestLevel));
     const flipped = playing && S.flipped && !S.dead;
     if (hudEls.grav.hidden === flipped) hudEls.grav.hidden = !flipped;
+    const showDuck = isTouch && playing && !S.paused;
+    if (duckBtn.hidden === showDuck) duckBtn.hidden = !showDuck;
   }
   function updateBestText() { el("bestStart").innerHTML = `Best: Level <b>${bestLevel}</b>`; }
 
@@ -1870,17 +1889,22 @@
   })();
 
   // ---- Input --------------------------------------------------------------
-  // Keyboard: Space/Up/W jump, Down/S duck. Touch: the top half jumps, the
-  // bottom half (or a downward swipe) ducks. Mouse clicks always jump.
+  // Keyboard: Space/Up/W jump, Down/S duck. A click or tap anywhere on the
+  // playfield jumps. On touchscreens, hold the Duck button or swipe down to duck.
   let isTouch = window.matchMedia("(pointer: coarse)").matches;
+  const duckBtn = el("duckBtn");
   const keys = { jump: false, duck: false };
   const pointers = new Map();
   function syncInput(freshJump) {
-    let jump = keys.jump, duck = keys.duck;
-    for (const ptr of pointers.values()) { if (ptr.role === "jump") jump = true; else duck = true; }
+    let jump = keys.jump, duck = keys.duck, btn = false;
+    for (const ptr of pointers.values()) {
+      if (ptr.role === "jump") jump = true; else duck = true;
+      if (ptr.btn) btn = true;
+    }
     if (freshJump) S.buffer = 0.15;
     S.held = jump;
     S.duckInput = duck;
+    duckBtn.classList.toggle("active", btn);
   }
   function clearInput() { keys.jump = keys.duck = false; pointers.clear(); syncInput(false); }
   const JUMP_KEYS = new Set(["Space", "ArrowUp", "KeyW"]);
@@ -1892,6 +1916,8 @@
       audio.init();
       if (S.mode === "title") { startGame(); return; }
       if (S.paused) { togglePause(false); return; }
+      // A focused HUD button would otherwise also "click" when Space is released.
+      if (document.activeElement instanceof HTMLButtonElement) document.activeElement.blur();
       keys.jump = true; syncInput(true);
     } else if (DUCK_KEYS.has(e.code)) {
       e.preventDefault();
@@ -1906,26 +1932,33 @@
     if (JUMP_KEYS.has(e.code)) { keys.jump = false; syncInput(false); }
     else if (DUCK_KEYS.has(e.code)) { keys.duck = false; syncInput(false); }
   });
+  window.addEventListener("pointerdown", e => { if (e.pointerType === "touch" || e.pointerType === "pen") isTouch = true; }, true);
   canvas.addEventListener("pointerdown", e => {
     e.preventDefault();
     audio.init();
-    if (e.pointerType === "touch" || e.pointerType === "pen") isTouch = true;
     if (S.mode !== "play" || S.paused) return;
-    const r = canvas.getBoundingClientRect();
-    const lower = e.pointerType !== "mouse" && e.clientY - r.top > r.height / 2;
-    pointers.set(e.pointerId, { role: lower ? "duck" : "jump", y0: e.clientY, t0: performance.now() });
+    pointers.set(e.pointerId, { role: "jump", y0: e.clientY, t0: performance.now() });
     try { canvas.setPointerCapture(e.pointerId); } catch { /* not supported */ }
-    syncInput(!lower);
+    syncInput(true);
   });
   canvas.addEventListener("pointermove", e => {
     const ptr = pointers.get(e.pointerId);
     if (!ptr || ptr.role !== "jump" || e.pointerType === "mouse") return;
     if (e.clientY - ptr.y0 > 30 && performance.now() - ptr.t0 < 450) { ptr.role = "duck"; syncInput(false); }
   });
+  duckBtn.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    audio.init();
+    if (S.mode !== "play" || S.paused) return;
+    pointers.set(e.pointerId, { role: "duck", btn: true });
+    try { duckBtn.setPointerCapture(e.pointerId); } catch { /* not supported */ }
+    syncInput(false);
+  });
   const endPointer = e => { if (pointers.delete(e.pointerId)) syncInput(false); };
-  canvas.addEventListener("pointerup", endPointer);
-  canvas.addEventListener("pointercancel", endPointer);
-  canvas.addEventListener("lostpointercapture", endPointer);
+  for (const node of [canvas, duckBtn]) {
+    for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) node.addEventListener(type, endPointer);
+    node.addEventListener("contextmenu", e => e.preventDefault());
+  }
   window.addEventListener("blur", () => { clearInput(); togglePause(true); });
   document.addEventListener("visibilitychange", () => { if (document.hidden) { clearInput(); togglePause(true); } });
 
