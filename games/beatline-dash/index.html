@@ -257,7 +257,7 @@
 <div class="overlay" id="startScreen">
   <div class="sheet panel">
     <h1 class="title">Beatline Dash</h1>
-    <p class="lede">Jump the spikes, dodge the saws and duck under low ceilings. Survive 80 seconds without crashing and a portal warps you to the next zone, drawn in a completely different style. Every zone runs faster and adds a new obstacle. A crash restarts the current zone's 80-second clock.</p>
+    <p class="lede">Climb stairs, leap pits, dodge saws and duck under low ceilings. Survive 80 seconds without crashing and a portal warps you to the next zone, drawn in a completely different style. Every zone runs faster and adds a new obstacle. A crash restarts the current zone's 80-second clock.</p>
     <ul class="zones" id="zoneList"></ul>
     <p class="controls">
       <span><kbd>Space</kbd> <kbd>&uarr;</kbd> <kbd>W</kbd>, click or tap anywhere: jump (hold to keep jumping)</span>
@@ -388,11 +388,14 @@
     return c;
   })();
   const grainPats = new WeakMap();
-  function grain(g, alpha) {
+  function grain(g, alpha, y0 = -offY - 420, y1 = viewH - offY + 420) {
     let pat = grainPats.get(g);
     if (!pat) { pat = g.createPattern(grainTex, "repeat"); grainPats.set(g, pat); }
-    g.save(); g.globalAlpha = alpha; g.fillStyle = pat; g.fillRect(-20, -offY - 20, viewW + 40, viewH + 40); g.restore();
+    g.save(); g.globalAlpha = alpha; g.fillStyle = pat; g.fillRect(-20, y0, viewW + 40, y1 - y0); g.restore();
   }
+  // Top and bottom of the screen in world-drawing coordinates (set per frame by
+  // drawWorld, since the camera shifts the world vertically).
+  let wTop = -offY - 20, wBot = viewH - offY + 20, bgShift = 0;
 
   // =========================================================================
   // ZONE 1: MEADOW RUN (flat cartoon, bold outlines)
@@ -424,12 +427,12 @@
       g.lineTo(viewW + 10, GROUND + 4); g.closePath(); fillOut(g, color);
     }
     return {
-      id: "meadow", name: "Meadow Run", isNew: "Spikes and crates", note: 48, bass: "square", lead: "triangle", cutoff: 900,
+      id: "meadow", name: "Meadow Run", isNew: "Stairs, drops, pits and floating platforms", note: 48, bass: "square", lead: "triangle", cutoff: 900,
       bg(g, t) {
         const top = -offY;
         const sky = g.createLinearGradient(0, top, 0, GROUND);
         sky.addColorStop(0, C.sky0); sky.addColorStop(1, C.sky1);
-        g.fillStyle = sky; g.fillRect(-10, top - 10, viewW + 20, GROUND - top + 20);
+        g.fillStyle = sky; g.fillRect(-10, top - 400, viewW + 20, GROUND - top + 410);
         const sx = viewW - 120, sy = Math.max(top + 90, 70);
         g.save(); g.translate(sx, sy); g.rotate(t * 0.15);
         for (let i = 0; i < 10; i++) { g.rotate(TAU / 10); tri(g, -8, -50, 8, -50, 0, -72); fillOut(g, C.sun, 2.5); }
@@ -439,32 +442,35 @@
         for (let i = i0; i < i0 + viewW / seg + 3; i++) cloud(g, i * seg - off + hash(i) * 120, top + 60 + hash(i + 5) * span);
         hills(g, 0.18, GROUND - 105, 70, C.hillFar, 1.3, true);
         hills(g, 0.4, GROUND - 38, 48, C.hillNear, 4.1, false);
+        const pit = g.createLinearGradient(0, GROUND, 0, GROUND + 260);
+        pit.addColorStop(0, "#5a3a1f"); pit.addColorStop(1, "#24160b");
+        g.fillStyle = pit; g.fillRect(-10, GROUND, viewW + 20, 1600);
       },
-      ground(g) {
-        const bottom = viewH - offY + 10;
-        g.fillStyle = C.dirt; g.fillRect(-10, GROUND, viewW + 20, bottom - GROUND);
-        const seg = 38, i0 = Math.floor(camX / seg) - 1;
+      ground(g, x0, x1, bottom) {
+        g.fillStyle = C.dirt; g.fillRect(x0, GROUND, x1 - x0, bottom - GROUND);
+        const seg = 38, i0 = Math.floor((camX + x0) / seg) - 1, i1 = Math.ceil((camX + x1) / seg) + 1;
         g.fillStyle = C.dirtDk;
-        for (let i = i0; i < i0 + viewW / seg + 3; i++) {
+        for (let i = i0; i < i1; i++) {
           g.beginPath(); g.ellipse(i * seg - camX + hash(i) * 20, GROUND + 32 + hash(i + 9) * 60, 5 + hash(i + 2) * 4, 3 + hash(i + 3) * 2, 0, 0, TAU); g.fill();
         }
-        g.fillStyle = C.grass; g.fillRect(-10, GROUND, viewW + 20, 10);
-        const s = 20, start = -((camX % s) + s) % s;
+        g.fillStyle = C.grass; g.fillRect(x0, GROUND, x1 - x0, 10);
+        const s = 20, start = x0 - ((((camX + x0) % s) + s) % s);
         g.beginPath();
-        for (let x = start - s; x < viewW + s; x += s) { g.moveTo(x + s / 2 + 10, GROUND + 10); g.arc(x + s / 2, GROUND + 10, 10, 0, Math.PI); }
+        for (let x = start - s; x < x1 + s; x += s) { g.moveTo(x + s / 2 + 10, GROUND + 10); g.arc(x + s / 2, GROUND + 10, 10, 0, Math.PI); }
         g.fill(); out(g, 2.5);
-        g.beginPath(); g.moveTo(-10, GROUND); g.lineTo(viewW + 10, GROUND); out(g, 3.5);
+        g.beginPath(); g.moveTo(x0, GROUND); g.lineTo(x1, GROUND); out(g, 3.5);
         g.beginPath();
-        const ts = 60, j0 = Math.floor(camX / ts) - 1;
-        for (let i = j0; i < j0 + viewW / ts + 3; i++) {
+        const ts = 60, j0 = Math.floor((camX + x0) / ts) - 1, j1 = Math.ceil((camX + x1) / ts) + 1;
+        for (let i = j0; i < j1; i++) {
           if (hash(i * 5) < 0.4) continue;
           const x = i * ts - camX + hash(i) * 30;
           g.moveTo(x - 4, GROUND); g.lineTo(x - 7, GROUND - 7); g.moveTo(x, GROUND); g.lineTo(x + 1, GROUND - 9); g.moveTo(x + 4, GROUND); g.lineTo(x + 7, GROUND - 6);
         }
         g.lineWidth = 2.5; g.strokeStyle = C.grassDk; g.stroke();
       },
-      roof(g, x, w) {
-        const top = -offY - 10, y = GROUND - CEIL_H;
+      side(g, x, y0, y1) { g.beginPath(); g.moveTo(x, y0); g.lineTo(x, y1); out(g, 3.5); },
+      roof(g, x, w, y) {
+        const top = wTop;
         g.fillStyle = C.dirt; g.fillRect(x, top, w, y - top);
         g.fillStyle = C.grass; g.fillRect(x, y - 10, w, 10);
         g.beginPath(); g.rect(x, top, w, y - top); out(g, 3.5);
@@ -511,7 +517,7 @@
         g.globalAlpha = 1;
       },
       barrier(g, x, w, yb, t, seed) {
-        const top = -offY - 10, n = Math.max(2, Math.round(w / 20));
+        const top = wTop, n = Math.max(2, Math.round(w / 20));
         g.beginPath(); g.moveTo(x, top); g.lineTo(x, yb - 8);
         for (let i = 0; i < n; i++) g.quadraticCurveTo(x + ((i + 0.5) / n) * w, yb + 8, x + ((i + 1) / n) * w, yb - 8);
         g.lineTo(x + w, top); g.closePath(); fillOut(g, C.rock, 3.5);
@@ -576,7 +582,7 @@
     function bricks(g, x, y0, w, rows, fill) {
       const bw = PX * 8, bh = PX * 3;
       for (let r = 0; r < rows; r++) {
-        const y = y0 + r * bh, shift = (r % 2) * (bw / 2), start = x - ((((snap(camX) + shift) % bw) + bw) % bw);
+        const y = y0 + r * bh, shift = (r % 2) * (bw / 2), start = x - ((((snap(camX + x) + shift) % bw) + bw) % bw);
         px(g, x, y, w, bh, fill);
         px(g, x, y + bh - PX, w, PX, K);
         for (let bx = start; bx < x + w; bx += bw) { if (bx >= x) px(g, bx, y, PX, bh - PX, K); if (bx + PX >= x && bx + PX * 3 <= x + w) px(g, bx + PX, y, PX * 2, PX, R); }
@@ -598,7 +604,7 @@
     return {
       id: "forge", name: "Forge", pixel: true, isNew: "Saws: on the ground, on chains and on tracks", note: 40, bass: "square", lead: "square", cutoff: 1400,
       bg(g, t) {
-        const top = snap(-offY) - PX, n = SKY.length, bh = Math.max(PX, snap((GROUND - top) / n));
+        const top = snap(-offY - 400), n = SKY.length, bh = Math.max(PX, snap((GROUND - top) / n));
         for (let i = 0; i < n; i++) {
           const y = top + i * bh;
           px(g, -PX, y, viewW + PX * 3, i === n - 1 ? GROUND - y : bh, SKY[i]);
@@ -618,16 +624,20 @@
           for (let k = 0; k < 3; k++) { const ph = (t * 0.5 + k / 3 + hash(i)) % 1, s = 12 - ph * 6; px(g, x + w - 14 + ph * 10, GROUND - h - 44 - ph * 70, s, s, SM); }
         }
         for (let x = 0; x < viewW + PX; x += PX * 2) px(g, x + ((Math.round(x / PX / 2) % 2) * PX), GROUND - PX * 2, PX, PX, R);
+        const PIT = ["#2a1208", "#1d0c06", "#140806"];
+        PIT.forEach((c, i) => px(g, -PX, GROUND + i * PX * 6, viewW + PX * 3, PX * 6, c));
+        px(g, -PX, GROUND + PX * 18, viewW + PX * 3, 1600, K);
+        for (let x = 0; x < viewW + PX; x += PX * 2) px(g, x + ((Math.round(x / PX / 2) % 2) * PX), GROUND + PX * 6, PX, PX, "#1d0c06");
       },
-      ground(g) {
-        const bottom = viewH - offY + PX;
-        px(g, -PX, GROUND, viewW + PX * 3, bottom - GROUND, D);
-        px(g, -PX, GROUND, viewW + PX * 3, PX, Y);
-        px(g, -PX, GROUND + PX, viewW + PX * 3, PX, O);
-        bricks(g, -PX, GROUND + PX * 2, viewW + PX * 3, 10, M);
+      ground(g, x0, x1, bottom) {
+        px(g, x0, GROUND, x1 - x0, bottom - GROUND, D);
+        px(g, x0, GROUND, x1 - x0, PX, Y);
+        px(g, x0, GROUND + PX, x1 - x0, PX, O);
+        bricks(g, x0, GROUND + PX * 2, x1 - x0, 10, M);
       },
-      roof(g, x, w) {
-        const top = snap(-offY) - PX, y = GROUND - CEIL_H;
+      side(g, x, y0, y1) { px(g, x - PX / 2, y0, PX, y1 - y0, K); },
+      roof(g, x, w, y) {
+        const top = snap(wTop) - PX;
         px(g, x, top, w, y - top, D);
         bricks(g, x, snap(y - PX * 2 - 30 * PX) , w, 10, M);
         px(g, x, y - PX * 2, w, PX, O);
@@ -669,7 +679,7 @@
         if (!used) disc(g, cx, cy, 1, Math.floor(t * 6) % 2 ? L : O);
       },
       barrier(g, x, w, yb, t, seed) {
-        const top = snap(-offY) - PX;
+        const top = snap(wTop) - PX;
         px(g, x, top, w, yb - top - PX * 3, D);
         bricks(g, x, snap(yb - PX * 3 - 15 * PX), w, 5, M);
         for (let c = 0; c * PX < w; c++) px(g, x + c * PX, yb - PX * 4, PX, PX, (c + Math.floor(t * 4)) % 4 < 2 ? Y : K);
@@ -752,7 +762,7 @@
       g.globalAlpha = 1;
     }
     function shelf(g, x, w, yb, seed, flat) {
-      const top = -offY - 10, r = rng(seed), pts = [[x, top], [x + w, top]];
+      const top = wTop, r = rng(seed), pts = [[x, top], [x + w, top]];
       for (let i = 0; i <= 12; i++) pts.push([x + w - (i / 12) * w, yb - (flat ? 0 : 3 + r() * 5)]);
       const sp = subdiv(pts, 10);
       wash(g, sp, "#5b98a6", 0.9, 2, seed); wash(g, sp, C.stoneDk, 0.3, 4, seed + 1, 1); edge(g, sp, C.stoneDk, 0.6, 1.5, seed + 2, 2);
@@ -764,28 +774,31 @@
         const top = -offY;
         const grad = g.createLinearGradient(0, top, 0, GROUND);
         grad.addColorStop(0, C.water0); grad.addColorStop(1, C.water1);
-        g.fillStyle = grad; g.fillRect(-10, top - 10, viewW + 20, GROUND - top + 20);
+        g.fillStyle = grad; g.fillRect(-10, top - 400, viewW + 20, GROUND - top + 410);
         g.fillStyle = "rgba(255,255,255,0.2)";
         for (let i = 0; i < 4; i++) { const x = viewW * (0.12 + i * 0.25) + Math.sin(t * 0.3 + i * 2) * 30; g.beginPath(); g.moveTo(x - 30, top); g.lineTo(x + 30, top); g.lineTo(x + 130, GROUND); g.lineTo(x + 40, GROUND); g.fill(); }
         g.imageSmoothingEnabled = true;
         for (const s of strips) { const off = (((camX * s.f) % SW) + SW) % SW; for (let x = -off; x < viewW; x += SW) g.drawImage(s.c, x, GROUND + 8 - s.h, SW, s.h); }
+        const pit = g.createLinearGradient(0, GROUND, 0, GROUND + 260);
+        pit.addColorStop(0, "#3d8ea0"); pit.addColorStop(1, "#0e3342");
+        g.fillStyle = pit; g.fillRect(-10, GROUND + 4, viewW + 20, 1600);
         grain(g, 0.5);
       },
-      ground(g) {
-        const bottom = viewH - offY + 10;
-        g.fillStyle = C.sand; g.fillRect(-10, GROUND, viewW + 20, bottom - GROUND);
+      ground(g, x0, x1, bottom) {
+        g.fillStyle = C.sand; g.fillRect(x0, GROUND, x1 - x0, bottom - GROUND);
         for (let k = 0; k < 3; k++) {
-          g.globalAlpha = 0.35; g.fillStyle = k === 2 ? "#c9ad7c" : C.sandDk; g.beginPath(); g.moveTo(-10, bottom);
+          g.globalAlpha = 0.35; g.fillStyle = k === 2 ? "#c9ad7c" : C.sandDk; g.beginPath(); g.moveTo(x0 - 10, bottom);
           const y0 = GROUND + 14 + k * 26;
-          for (let x = -10; x <= viewW + 10; x += 16) { const w = x + camX; g.lineTo(x, y0 + Math.sin(w * 0.02 + k) * 5 + Math.sin(w * 0.05 + k * 3) * 3); }
-          g.lineTo(viewW + 10, bottom); g.fill();
+          for (let x = x0 - 10; x <= x1 + 10; x += 16) { const w = x + camX; g.lineTo(x, y0 + Math.sin(w * 0.02 + k) * 5 + Math.sin(w * 0.05 + k * 3) * 3); }
+          g.lineTo(x1 + 10, bottom); g.fill();
         }
         g.globalAlpha = 1;
-        g.beginPath(); for (let x = -10; x <= viewW + 10; x += 12) g.lineTo(x, GROUND + Math.sin((x + camX) * 0.07) * 1.2);
+        g.beginPath(); for (let x = x0 - 10; x <= x1 + 10; x += 12) g.lineTo(x, GROUND + Math.sin((x + camX) * 0.07) * 1.2);
         g.strokeStyle = "rgba(150,110,60,0.55)"; g.lineWidth = 2.5; g.stroke();
-        grain(g, 0.35);
+        grain(g, 0.35, GROUND - 10, bottom);
       },
-      roof(g, x, w, t, seed) { shelf(g, x, w, GROUND - CEIL_H, 99, true); },
+      side(g, x, y0, y1) { g.beginPath(); g.moveTo(x, y0); g.lineTo(x, y1); g.strokeStyle = "rgba(150,110,60,0.6)"; g.lineWidth = 2.5; g.stroke(); },
+      roof(g, x, w, y) { shelf(g, x, w, y, 99, true); },
       spike(g, x, by, dir, seed) {
         const tip = by - dir * (B - 4), pts = subdiv([[x + 3, by], [x + B / 2, tip], [x + B - 3, by]], 7);
         wash(g, pts, C.coral, 0.65, 3, seed); wash(g, pts, C.coralDk, 0.3, 4, seed + 1, 1); edge(g, pts, C.coralDk, 0.75, 1.5, seed + 2, 1.8);
@@ -878,7 +891,7 @@
           const x = i * seg - off + hash(i + seed) * seg * 0.6, n = 2 + ((hash(i * 3 + seed) * 3) | 0);
           for (let k = 0; k < n; k++) {
             const len = lenMin + hash(i * 7 + k + seed) * (lenMax - lenMin), sw = hash(i + k * 5 + seed) - 0.5;
-            leaf(g, x + k * 7, fromTop ? -offY - 10 : GROUND + 6, len, len * 0.22, fromTop ? Math.PI / 2 + sw * 1.2 : -Math.PI / 2 + sw * 1.6);
+            leaf(g, x + k * 7, fromTop ? -offY - 10 - bgShift : GROUND + 6, len, len * 0.22, fromTop ? Math.PI / 2 + sw * 1.2 : -Math.PI / 2 + sw * 1.6);
           }
         }
       }, color);
@@ -894,27 +907,30 @@
       bg(g, t) {
         const top = -offY;
         const grad = g.createLinearGradient(0, top, 0, GROUND); grad.addColorStop(0, C.sky0); grad.addColorStop(1, C.sky1);
-        g.fillStyle = grad; g.fillRect(-10, top - 10, viewW + 20, GROUND - top + 20);
+        g.fillStyle = grad; g.fillRect(-10, top - 400, viewW + 20, GROUND - top + 410);
         paper(g, () => { g.beginPath(); g.arc(viewW - 130, Math.max(top + 85, 70), 40, 0, TAU); }, C.sun);
         leafLayer(g, 0.1, 70, 1, 140, 230, C.far, false);
         paper(g, () => {
           g.beginPath();
           const seg = 230, off = camX * 0.25, i0 = Math.floor(off / seg) - 1;
-          for (let i = i0; i < i0 + viewW / seg + 3; i++) g.rect(i * seg - off + hash(i + 40) * 80, top - 10, 22 + hash(i) * 14, GROUND - top + 10);
+          for (let i = i0; i < i0 + viewW / seg + 3; i++) g.rect(i * seg - off + hash(i + 40) * 80, top - 400, 22 + hash(i) * 14, GROUND - top + 400);
         }, C.trunk);
         leafLayer(g, 0.25, 90, 2, 90, 150, C.mid, false);
         leafLayer(g, 0.5, 60, 3, 50, 110, C.vine, true);
         leafLayer(g, 0.55, 80, 4, 50, 90, C.near, false);
+        const pit = g.createLinearGradient(0, GROUND, 0, GROUND + 260);
+        pit.addColorStop(0, "#2f4a2c"); pit.addColorStop(1, "#142212");
+        g.fillStyle = pit; g.fillRect(-10, GROUND + 4, viewW + 20, 1600);
         grain(g, 0.45);
       },
-      ground(g) {
-        const bottom = viewH - offY + 10;
-        paper(g, () => torn(g, -10, viewW + 10, GROUND - 1, 3, 1, bottom), C.grass, 0, -3);
-        paper(g, () => torn(g, -10, viewW + 10, GROUND + 14, 6, 3, bottom), C.grassDk, 0, -3);
-        paper(g, () => torn(g, -10, viewW + 10, GROUND + 36, 6, 7, bottom), C.soil, 0, -3);
+      ground(g, x0, x1, bottom) {
+        paper(g, () => torn(g, x0, x1, GROUND - 1, 3, 1, bottom), C.grass, 0, -3);
+        paper(g, () => torn(g, x0, x1, GROUND + 14, 6, 3, bottom), C.grassDk, 0, -3);
+        paper(g, () => torn(g, x0, x1, GROUND + 36, 6, 7, bottom), C.soil, 0, -3);
       },
-      roof(g, x, w) {
-        const top = -offY - 10, y = GROUND - CEIL_H;
+      side(g, x, y0, y1) { g.fillStyle = SH; g.fillRect(x - 2, y0, 4, y1 - y0); },
+      roof(g, x, w, y) {
+        const top = wTop;
         paper(g, () => { g.beginPath(); g.rect(x, top, w, y - top); }, C.grass, 0, 4);
         paper(g, () => { g.beginPath(); g.rect(x, top, w, y - 14 - top); }, C.grassDk, 0, 3);
         paper(g, () => { g.beginPath(); g.rect(x, top, w, y - 36 - top); }, C.soil, 0, 3);
@@ -946,7 +962,7 @@
         g.globalAlpha = 1;
       },
       barrier(g, x, w, yb, t, seed) {
-        const top = -offY - 10;
+        const top = wTop;
         paper(g, () => { g.beginPath(); g.rect(x, top, w, yb - 14 - top); }, C.vine);
         paper(g, () => { g.beginPath(); for (let lx = x + 4; lx < x + w; lx += 9) leaf(g, lx, yb - 22, 22, 6, Math.PI / 2 + (hash(seed + lx) - 0.5) * 0.5); }, C.near, 2, 2);
       },
@@ -1026,26 +1042,29 @@
       bg(g, t) {
         const top = -offY;
         const grad = g.createLinearGradient(0, top, 0, GROUND); grad.addColorStop(0, C.sky0); grad.addColorStop(1, C.sky1);
-        g.fillStyle = grad; g.fillRect(-10, top - 10, viewW + 20, GROUND - top + 20);
+        g.fillStyle = grad; g.fillRect(-10, top - 400, viewW + 20, GROUND - top + 410);
         const sx = viewW - 130, sy = Math.max(top + 85, 70);
         for (let i = 0; i < 6; i++) { const a0 = (i / 6) * TAU, a1 = ((i + 1) / 6) * TAU; poly(g, [sx, sy, sx + Math.cos(a0) * 40, sy + Math.sin(a0) * 40, sx + Math.cos(a1) * 40, sy + Math.sin(a1) * 40], i % 2 ? "#ffffff" : "#fff6d8"); }
         peaks(g, 0.1, 150, GROUND + 4, 140, 210, ["#b8d2ea", "#a9c7e3", "#9cbddd", "#89aed3"], 3);
         peaks(g, 0.3, 120, GROUND + 4, 60, 120, ["#d7e7f5", "#c3daee", "#b3cfe8", "#9dbfdf"], 9);
+        const pit = g.createLinearGradient(0, GROUND, 0, GROUND + 260);
+        pit.addColorStop(0, "#8dbde3"); pit.addColorStop(1, "#1f4a7a");
+        g.fillStyle = pit; g.fillRect(-10, GROUND + 3, viewW + 20, 1600);
       },
-      ground(g) {
-        const bottom = viewH - offY + 10;
-        g.fillStyle = C.ice2; g.fillRect(-10, GROUND, viewW + 20, bottom - GROUND);
-        const s = 40, start = -((camX % s) + s) % s - s;
-        for (let x = start; x < viewW + s; x += s) {
+      ground(g, x0, x1, bottom) {
+        g.fillStyle = C.ice2; g.fillRect(x0, GROUND, x1 - x0, bottom - GROUND);
+        const s = 40, start = x0 - ((((camX + x0) % s) + s) % s) - s;
+        for (let x = start; x < x1 + s; x += s) {
           const i = Math.round((x + camX) / s);
           poly(g, [x, GROUND + 18, x + s / 2, GROUND + 50, x + s, GROUND + 18], hash(i * 3) > 0.5 ? C.ice2 : C.ice3);
           poly(g, [x + s / 2, GROUND + 50, x + s, GROUND + 18, x + s * 1.5, GROUND + 50], hash(i * 3 + 1) > 0.5 ? C.ice3 : "#6aa3d2");
         }
-        iceBand(g, -10, viewW + 10, GROUND, true);
-        g.fillStyle = C.ice3; g.fillRect(-10, GROUND - 1, viewW + 20, 2);
+        iceBand(g, x0, x1, GROUND, true);
+        g.fillStyle = C.ice3; g.fillRect(x0, GROUND - 1, x1 - x0, 2);
       },
-      roof(g, x, w) {
-        const top = -offY - 10, y = GROUND - CEIL_H;
+      side(g, x, y0, y1) { g.fillStyle = C.ice3; g.fillRect(x - 1, y0, 2, y1 - y0); },
+      roof(g, x, w, y) {
+        const top = wTop;
         g.fillStyle = C.ice2; g.fillRect(x, top, w, y - top);
         g.save(); g.beginPath(); g.rect(x, top, w, y - top + 1); g.clip(); iceBand(g, x, x + w, y, false); g.restore();
         g.fillStyle = C.ice3; g.fillRect(x, y - 1, w, 2);
@@ -1090,7 +1109,7 @@
         g.globalAlpha = 1;
       },
       barrier(g, x, w, yb, t, seed) {
-        const top = -offY - 10;
+        const top = wTop;
         g.fillStyle = C.ice1; g.fillRect(x, top, w, yb - 16 - top);
         for (let fy = yb - 16 - 40, k = 0; fy > top; fy -= 40, k++) poly(g, [x, fy, x + w * 0.5, fy + 40, x + w, fy], k % 2 ? C.ice0 : C.ice2);
         for (let ix = x, i = 0; ix < x + w - 1; ix += 10, i++) {
@@ -1164,7 +1183,7 @@
       sketch(g, [[x, y], [x, y + s]], seed * 3 + 3, INK, 1.2, false);
     }
     function mass(g, x, w, yb, seed) {
-      const top = -offY - 10;
+      const top = wTop;
       const pts = subdiv([[x, top], [x + w, top], [x + w, yb - 2], [x, yb - 2]], 9);
       fillWob(g, pts, seed, INK);
       g.save(); polyPath(g, [[x - 4, yb - 12], [x + w + 4, yb - 12], [x + w + 4, yb], [x - 4, yb]]); g.clip(); hatch(g, x - 4, yb - 12, w + 8, 12, 4, INK, 1.1); g.restore();
@@ -1174,8 +1193,8 @@
       bg(g, t) {
         boil = Math.floor(t * 7);
         const top = -offY;
-        g.fillStyle = PAPER; g.fillRect(-10, top - 10, viewW + 20, GROUND - top + 20);
-        grain(g, 0.9);
+        g.fillStyle = PAPER; g.fillRect(-10, top - 400, viewW + 20, GROUND - top + 410);
+        grain(g, 0.9, top - 400, GROUND + 10);
         const cx = viewW - 140, cy = Math.max(top + 100, 85), R = 58;
         g.save(); g.beginPath(); g.arc(cx, cy, R, 0, TAU); g.clip(); hatch(g, cx - R, cy - R, R * 2, R * 2, 5, INK, 1); g.restore();
         sketch(g, circlePts(cx, cy, R, R, 30), 5, INK, 2.2);
@@ -1184,18 +1203,20 @@
         sketch(g, pts, 11, PENCIL, 1.5, false);
         const seg = 260, off2 = camX * 0.3, i0 = Math.floor(off2 / seg) - 1, span = Math.max(30, GROUND - top - 260);
         for (let i = i0; i < i0 + viewW / seg + 3; i++) cube(g, i * seg - off2 + hash(i) * 100, top + 70 + hash(i + 3) * span + Math.sin(t + i) * 6, 14 + hash(i + 8) * 16, i + 50);
+        g.fillStyle = INK; g.fillRect(-10, GROUND + 6, viewW + 20, 1600);
+        g.save(); g.beginPath(); g.rect(-10, GROUND - 8, viewW + 20, 16); g.clip(); hatch(g, -10, GROUND - 8, viewW + 20, 16, 4, INK, 1.2); g.restore();
       },
-      ground(g) {
-        const bottom = viewH - offY + 10;
-        g.fillStyle = PAPER; g.fillRect(-10, GROUND, viewW + 20, bottom - GROUND);
-        const s = 9, start = -((camX % s) + s) % s;
+      ground(g, x0, x1, bottom) {
+        g.fillStyle = PAPER; g.fillRect(x0, GROUND, x1 - x0, bottom - GROUND);
+        const s = 9, start = x0 - ((((camX + x0) % s) + s) % s);
         g.beginPath();
-        for (let x = start - 40; x < viewW + 40; x += s) { const len = 14 + hash(Math.round((x + camX) / s)) * 22; g.moveTo(x, GROUND + 4); g.lineTo(x - len * 0.6, GROUND + 4 + len); }
+        for (let x = start - 40; x < x1 + 40; x += s) { const len = 14 + hash(Math.round((x + camX) / s)) * 22; g.moveTo(x, GROUND + 4); g.lineTo(x - len * 0.6, GROUND + 4 + len); }
         g.strokeStyle = INK; g.lineWidth = 1; g.stroke();
-        const line = []; for (let x = -20; x <= viewW + 20; x += 30) line.push([x, GROUND]);
+        const line = []; for (let x = x0 - 10; x <= x1 + 10; x += 30) line.push([x, GROUND]);
         sketch(g, line, 77, INK, 2.6, false);
       },
-      roof(g, x, w) { mass(g, x, w, GROUND - CEIL_H, 31); },
+      side(g, x, y0, y1) { sketch(g, [[x, y0], [x, y1]], 91, INK, 2.2, false); },
+      roof(g, x, w, y) { mass(g, x, w, y, 31); },
       spike(g, x, by, dir, seed) {
         const tip = by - dir * (B - 4), pts = subdiv([[x + 4, by], [x + B / 2, tip], [x + B - 4, by]], 10);
         fillWob(g, pts, seed, RED, 1.5, 1); sketch(g, pts, seed + 1, INK, 2);
@@ -1272,97 +1293,494 @@
   const ROMAN = ["", " II", " III", " IV", " V", " VI", " VII", " VIII", " IX", " X"];
   const zoneName = lvl => styleOf(lvl).name + (ROMAN[Math.floor(lvl / STYLES.length)] ?? " +" + Math.floor(lvl / STYLES.length));
 
-  // ---- Obstacle patterns --------------------------------------------------
-  // Each builder takes k = speed / 330 and returns a chunk in block units.
-  // Spacing that depends on airtime is multiplied by k so a chunk stays
-  // beatable as the run speeds up. d = difficulty at which it unlocks
-  // (difficulty = level index + progress through the level). A pattern with a
-  // tag and an integer d introduces that level's new obstacle.
-  const sp = (x, row = 0) => ({ t: "s", x, row });
-  const blk = (x, w, h, row = 0) => ({ t: "b", x, w, h, row });
-  const saw = (kind, x, ceil = false) => ({ t: "saw", kind, x, ceil });
-  const fall = (x, w = 2) => ({ t: "fb", x, w, h: 1 });
-  const slide = (x, kind, w, h) => ({ t: "mb", kind, x, w, h });
-  const lowCeil = (x, w) => ({ t: "lc", x, w });
-  function flipSection(k, items) {
-    const o = [{ t: "gp", x: 0, flip: true }];
-    let last = 0;
-    for (const [x0, kind] of items) {
-      const x = x0 * k;
-      if (kind === "s") o.push({ t: "s", x, ceil: true });
-      else if (kind === "b") o.push({ t: "b", x, w: 2, h: 1, ceil: true });
-      else o.push(saw("ground", x + 1, true));
-      last = Math.max(last, x + 2);
-    }
-    const end = last + 4.5 * k;
-    o.push({ t: "gp", x: end, flip: false });
-    o.push({ t: "roof", x: -2, w: end + 4 });
-    return { len: end + 7 * k, o };
+  // ---- Level chunks -------------------------------------------------------
+  // Levels are chained from hand-built chunks, each a 3-8 second stretch of
+  // terrain and obstacles. Chunks are written in block units: x counts from the
+  // chunk start and heights count from the floor the chunk starts on. Lengths
+  // that depend on airtime are scaled by k (speed / 330) so every jump stays
+  // makeable as the run speeds up.
+  function builder(k) {
+    const c = {
+      k, x: 0, f: 0, lo: 0, hi: 0, ceil: 0, floors: [], o: [],
+      // terrain
+      run(n) {
+        const last = c.floors[c.floors.length - 1];
+        if (last && last.top === c.f && Math.abs(last.x + last.w - c.x) < 1e-6) last.w += n;
+        else c.floors.push({ t: "f", x: c.x, w: n, top: c.f });
+        c.x += n;
+        return c;
+      },
+      up(d = 1) { c.f += d; c.hi = Math.max(c.hi, c.f); return c; },
+      down(d = 1) { c.f -= d; c.lo = Math.min(c.lo, c.f); return c; },
+      gap(n) { c.x += n; return c; },
+      // obstacles: x is a chunk position, dy counts blocks above the current floor
+      spike(x, n = 1, dy = 0) { for (let i = 0; i < n; i++) c.o.push({ t: "s", x: x + i, base: c.f + dy, dir: 1 }); return c; },
+      block(x, w, h = 1, dy = 0) { c.o.push({ t: "b", x, w, bot: c.f + dy, top: c.f + dy + h }); return c; },
+      saw(kind, x) { c.o.push({ t: "saw", kind, x, base: c.f }); return c; },
+      pad(x) { c.o.push({ t: "p", x, base: c.f }); return c; },
+      orb(x, dy) { c.o.push({ t: "o", x, cy: c.f + dy + 0.5 }); return c; },
+      fall(x, w = 2, land = 0) { c.o.push({ t: "fb", x, w, h: 1, land: c.f + land }); return c; },
+      slide(x, kind, w = 2, h = 1, rest = 0, settle = 3) { c.o.push({ t: "mb", x, w, h, kind, base: c.f + rest, settle }); return c; },
+      low(x, w) { c.o.push({ t: "lc", x, w, bottom: c.f }); return c; },
+      // gravity flip: between x0 and x1 the player runs on a ceiling CEIL_H above the current floor
+      flip(x0, x1) {
+        c.ceil = c.f + CEIL_H / B;
+        c.o.push({ t: "gp", x: x0, flip: true, base: c.f }, { t: "gp", x: x1, flip: false, base: c.f }, { t: "roof", x: x0 - 2, w: x1 - x0 + 4, ceil: c.ceil });
+        return c;
+      },
+      cspike(x, n = 1) { for (let i = 0; i < n; i++) c.o.push({ t: "s", x: x + i, base: c.ceil, dir: -1 }); return c; },
+      cblock(x, w, h = 1) { c.o.push({ t: "b", x, w, bot: c.ceil - h, top: c.ceil }); return c; },
+      csaw(x) { c.o.push({ t: "saw", kind: "ceil", x, base: c.ceil }); return c; },
+    };
+    return c;
   }
-  const PATTERNS = [
-    // Zone 1: spikes and crates
-    { d: 0, b: () => ({ len: 1, o: [sp(0)] }) },
-    { d: 0, b: () => ({ len: 1, o: [blk(0, 1, 1)] }) },
-    { d: 0, b: () => ({ len: 3, o: [blk(0, 3, 1)] }) },
-    { d: 0.35, b: () => ({ len: 2, o: [sp(0), sp(1)] }) },
-    { d: 0.7, b: k => ({ len: 5.5 * k + 1, o: [sp(0), sp(5.5 * k)] }) },
-    // Zone 2: saws (plus platforms)
-    { d: 1, tag: "saw", b: () => ({ len: 2, o: [saw("ground", 1)] }) },
-    { d: 1, tag: "saw", b: k => ({ len: 5.5 * k + 3, o: [sp(0), saw("hang", 5.5 * k + 1.5)] }) },
-    { d: 1.3, tag: "saw", b: k => ({ len: 5.5 * k + 2, o: [saw("track", 1), saw("ground", 1 + 5.5 * k)] }) },
-    { d: 1.6, tag: "saw", b: k => ({ len: 5.5 * k + 2, o: [saw("ground", 1), saw("ground", 1 + 5.5 * k)] }) },
-    { d: 1.2, b: () => ({ len: 6, o: [blk(0, 2, 1), sp(2), sp(3), blk(4, 2, 1)] }) },
-    { d: 1.4, b: k => ({ len: 3 + 1.5 * k, o: [blk(0, 3, 1), sp(2, 1)] }) },
-    { d: 1.7, b: k => ({ len: 3 + 1.5 * k, o: [blk(1.5 * k, 3, 2)] }) },
-    // Zone 3: falling and sliding blocks (plus pads, stairs)
-    { d: 2, tag: "move", b: () => ({ len: 2, o: [fall(0)] }) },
-    { d: 2, tag: "move", b: () => ({ len: 2, o: [slide(0, "low", 2, 1)] }) },
-    { d: 2.4, tag: "move", b: k => ({ len: 5.5 * k + 2, o: [sp(0), slide(5.5 * k + 0.5, "gate", 1, 2)] }) },
-    { d: 2.6, tag: "move", b: k => ({ len: 6 * k + 2, o: [fall(0), fall(6 * k)] }) },
-    { d: 2.2, b: () => ({ len: 3, o: [sp(0), sp(1), sp(2)] }) },
-    { d: 2.3, b: k => ({ len: 10.5 * k, o: [{ t: "p", x: 1.5 * k }, blk(1.5 * k + 3, 2, 3)] }) },
-    { d: 2.7, b: k => ({ len: 11 + 2 * k, o: [blk(0, 3, 1), blk(4, 3, 2), blk(8, 3, 3)] }) },
-    // Zone 4: low ceilings (plus orbs)
-    { d: 3, tag: "duck", b: k => ({ len: 2 * k + 3, o: [lowCeil(2 * k, 3)] }) },
-    { d: 3.4, tag: "duck", b: k => ({ len: 9 * k + 6, o: [lowCeil(2 * k, 5), sp(7 * k + 5)] }) },
-    { d: 3.6, tag: "duck", b: k => ({ len: 7 * k + 4, o: [saw("ground", 1), lowCeil(1 + 6 * k, 3)] }) },
-    { d: 3.2, b: () => ({ len: 7, o: [sp(0), sp(1), sp(2), sp(3), sp(4), { t: "o", x: 2, row: 2 }] }) },
-    { d: 3.5, b: k => { const w = Math.ceil(4.5 + 5.5 * k); return { len: w + 1.5 * k, o: [blk(0, w, 1), sp(3, 1), sp(w - 1, 1)] }; } },
-    // Zone 5: gravity flips (plus pad pits)
-    { d: 4, tag: "flip", b: k => flipSection(k, [[8, "s"], [13, "s"], [18, "b"]]) },
-    { d: 4.5, tag: "flip", b: k => flipSection(k, [[8, "s"], [9, "s"], [14, "saw"], [19.5, "b"]]) },
-    { d: 4.3, b: k => ({ len: 10.5 * k, o: [{ t: "p", x: 1.5 * k }, sp(1.5 * k + 2), sp(1.5 * k + 3), sp(1.5 * k + 4)] }) },
-    // Zone 6: everything mixed
-    { d: 5, tag: "mix", b: k => ({ len: 5 * k + 5, o: [fall(0), lowCeil(2 + 5 * k, 3)] }) },
-    { d: 5, tag: "mix", b: k => ({ len: 5.5 * k + 6, o: [sp(0), saw("hang", 5.5 * k + 1.5), slide(5.5 * k + 4, "gate", 1, 2)] }) },
-    { d: 5.3, tag: "mix", b: k => flipSection(k, [[8, "saw"], [13.5, "s"], [14.5, "s"], [19.5, "saw"]]) },
-    { d: 5.5, b: () => ({ len: 9, o: [sp(0), sp(1), sp(2), { t: "o", x: 2, row: 2 }, sp(5), sp(6), sp(7)] }) },
-    { d: 5.6, tag: "mix", b: k => ({ len: 8 * k + 4, o: [saw("track", 1), lowCeil(1 + 5 * k, 3)] }) },
+  const stepLen = k => Math.round(3.74 * k + 0.4);   // a stair step as long as a jump that lands one block up
+
+  // tier 0 = short filler used to top up the last seconds before the portal
+  const CHUNKS = [
+    // ---- Zone 1: Meadow Run - terrain, spikes and crates ----
+    { lvl: 0, tier: 1, name: "hillside", build(c, k, w) {
+      const L = stepLen(k);
+      c.run(2).up().run(L).up().run(w(3));
+      c.spike(c.x).run(w(5));
+      c.down(2).run(w(4));
+      c.block(c.x, 1, 1).run(w(4) + 1);
+      c.gap(w(2.6)).run(w(3));
+    } },
+    { lvl: 0, tier: 1, name: "pit hops", build(c, k, w) {
+      c.run(2).gap(w(2.6)).run(w(3.5)).gap(w(2.6)).run(w(4));
+      c.spike(c.x).run(w(4));
+      c.gap(w(3)).run(w(3));
+      c.block(c.x, 2, 1).run(w(4) + 2);
+    } },
+    { lvl: 0, tier: 1, name: "crate walk", build(c, k, w) {
+      c.run(2);
+      c.block(c.x, 2, 1).spike(c.x + 2, 2).block(c.x + 4, 2, 1).run(6 + w(3));
+      c.spike(c.x, 2).run(w(4) + 2);
+      c.block(c.x, 3, 1).run(3 + w(3));
+      c.spike(c.x).run(w(3));
+    } },
+    { lvl: 0, tier: 2, name: "summit dive", build(c, k, w) {
+      const L = stepLen(k);
+      c.run(2).up().run(L).up().run(L).up().run(w(3));
+      c.spike(c.x).run(w(5));
+      c.down(3).run(w(4.5));
+      c.spike(c.x, 2).run(w(5));
+    } },
+    { lvl: 0, tier: 2, name: "stepping stones", build(c, k, w) {
+      const pw = w(2);
+      c.run(3).gap(w(2.2));
+      c.block(c.x, pw, 1, -1).gap(pw).gap(w(1.8));
+      c.block(c.x, pw, 1, 0).gap(pw).gap(w(2.4));
+      c.block(c.x, pw, 1, -1).gap(pw).gap(w(2.4));
+      c.run(w(3.5)).spike(c.x).run(w(4));
+    } },
+    { lvl: 0, tier: 2, name: "terrace", build(c, k, w) {
+      c.run(2).up().run(w(5));
+      c.spike(c.x).run(w(5));
+      c.block(c.x, 2, 1).run(2 + w(5));
+      c.up().run(w(4));
+      c.spike(c.x, 2).run(w(5));
+      c.down().run(w(3));
+    } },
+    { lvl: 0, tier: 3, name: "spiked stairs", build(c, k, w) {
+      const L = stepLen(k);
+      c.run(2);
+      for (let i = 0; i < 4; i++) { c.up().run(L); if (i % 2 === 1) c.spike(c.x - 2); }
+      c.run(w(3));
+      c.down(4).run(w(2)).spike(c.x, 2).run(w(5));
+    } },
+    { lvl: 0, tier: 3, name: "broken bridge", build(c, k, w) {
+      c.run(2).gap(w(2.4)).up().run(w(3.5));
+      c.gap(w(2.6)).down().run(w(3.5));
+      c.gap(w(3)).run(w(3));
+      c.spike(c.x, 2).run(w(3.5));
+      c.gap(w(2.8)).run(w(3));
+    } },
+    { lvl: 0, tier: 3, name: "tower leap", build(c, k, w) {
+      c.run(2).pad(c.x).run(w(2.5));
+      c.up(3).run(w(6));
+      c.spike(c.x).run(w(3.5));
+      c.down(3).run(w(2)).spike(c.x, 2).run(w(5));
+      c.gap(w(2.6)).run(w(3));
+    } },
+    { lvl: 0, tier: 0, name: "filler spike", build(c, k, w) { c.run(2).spike(c.x).run(w(3)); } },
+    { lvl: 0, tier: 0, name: "filler pit", build(c, k, w) { c.run(1).gap(w(2.6)).run(w(2)); } },
+    { lvl: 0, tier: 0, name: "filler crate", build(c, k, w) { c.run(2).block(c.x, 2, 1).run(2 + w(3)); } },
+
+    // ---- Zone 2: Forge - saws ----
+    { lvl: 1, tier: 1, name: "saw step", build(c, k, w) {
+      c.run(2).up().run(w(3.5));
+      c.saw("ground", c.x).run(w(5));
+      c.down().run(w(3.5));
+      c.saw("ground", c.x).run(w(4.5));
+      c.gap(w(2.6)).run(w(3));
+      c.spike(c.x).run(w(3.5));
+    } },
+    { lvl: 1, tier: 1, name: "chain gang", build(c, k, w) {
+      c.run(2).spike(c.x).run(w(5.5) + 1.5);
+      c.saw("hang", c.x).run(w(4));
+      c.up().run(w(4));
+      c.spike(c.x).run(w(4));
+      c.down().run(w(3));
+      c.gap(w(2.6)).run(w(3));
+    } },
+    { lvl: 1, tier: 1, name: "saw pit", build(c, k, w) {
+      c.run(2).saw("ground", c.x + 1).run(2 + w(4));
+      c.gap(w(2.6)).run(w(4));
+      c.saw("ground", c.x).run(w(4));
+      c.gap(w(2.6)).run(w(3));
+      c.saw("ground", c.x + 1).run(1 + w(3.5));
+    } },
+    { lvl: 1, tier: 2, name: "track ledge", build(c, k, w) {
+      c.run(2).up().run(w(4));
+      c.saw("track", c.x).run(w(5.5));
+      c.saw("ground", c.x).run(w(4.5));
+      c.spike(c.x, 2).run(w(4));
+      c.down().run(w(3)).gap(w(2.6)).run(w(3));
+    } },
+    { lvl: 1, tier: 2, name: "saw drop", build(c, k, w) {
+      const L = stepLen(k);
+      c.run(2).up().run(L).up().run(w(4));
+      c.down(2).run(w(2));
+      c.saw("ground", c.x).run(w(5));
+      c.spike(c.x).run(w(3.5));
+      c.gap(w(2.6)).run(w(3));
+      c.saw("ground", c.x).run(w(3));
+    } },
+    { lvl: 1, tier: 2, name: "saw platforms", build(c, k, w) {
+      c.run(3).gap(w(2.2));
+      c.block(c.x, 3, 1, -1).gap(3).gap(w(2));
+      c.block(c.x, 3, 1, 0).gap(3).gap(w(2.4));
+      c.run(w(3.5)).saw("ground", c.x).run(w(5.5));
+      c.saw("ground", c.x).run(w(3));
+    } },
+    { lvl: 1, tier: 3, name: "saw stairs", build(c, k, w) {
+      const L = stepLen(k);
+      c.run(2);
+      for (let i = 0; i < 3; i++) { c.up().run(L); if (i % 2 === 0) c.saw("ground", c.x - 1.5); }
+      c.run(w(3));
+      c.down(3).run(w(4.5));
+      c.saw("ground", c.x).run(w(4));
+      c.gap(w(2.6)).run(w(3));
+    } },
+    { lvl: 1, tier: 3, name: "grinder", build(c, k, w) {
+      c.run(2).saw("ground", c.x + 1).run(2 + w(5.5));
+      c.saw("ground", c.x - 1).run(w(3.5));
+      c.up().run(w(3)).saw("hang", c.x + 1).run(1 + w(4));
+      c.down().run(w(3.5));
+      c.saw("ground", c.x).run(w(3));
+    } },
+    { lvl: 1, tier: 3, name: "foundry", build(c, k, w) {
+      c.run(2).up().run(w(4));
+      c.saw("track", c.x).run(w(5));
+      c.saw("ground", c.x).run(w(5.5));
+      c.saw("hang", c.x).run(w(3.5));
+      c.gap(w(2.8)).down().run(w(4));
+      c.spike(c.x, 2).run(w(3));
+    } },
+
+    // ---- Zone 3: Reef - falling and sliding blocks ----
+    { lvl: 2, tier: 1, name: "rockfall", build(c, k, w) {
+      c.run(3).fall(c.x, 2).run(2 + w(6));
+      c.spike(c.x).run(w(5));
+      c.fall(c.x, 1).run(1 + w(5));
+      c.gap(w(2.6)).run(w(3));
+    } },
+    { lvl: 2, tier: 1, name: "slider hop", build(c, k, w) {
+      c.run(3).slide(c.x, "low", 2).run(2 + w(5));
+      c.gap(w(2.6)).run(w(4));
+      c.slide(c.x, "low", 3).run(3 + w(5));
+      c.spike(c.x, 2).run(w(3));
+    } },
+    { lvl: 2, tier: 1, name: "sunken bridge", build(c, k, w) {
+      c.run(3).gap(w(2)).fall(c.x, 2, -1).gap(2).gap(w(2)).run(w(4));
+      c.spike(c.x).run(w(5));
+      c.fall(c.x, 2).run(2 + w(4));
+      c.gap(w(2.6)).run(w(3));
+    } },
+    { lvl: 2, tier: 2, name: "gate run", build(c, k, w) {
+      c.run(2).spike(c.x).run(w(5.5) + 0.5);
+      c.slide(c.x, "gate", 1, 2).run(1 + w(4));
+      c.up().run(w(3.5));
+      c.slide(c.x, "gate", 1, 2).run(1 + w(4));
+      c.down().run(w(3));
+      c.spike(c.x, 2).run(w(3));
+    } },
+    { lvl: 2, tier: 2, name: "tide bridge", build(c, k, w) {
+      c.run(3).gap(w(2)).slide(c.x, "low", w(2), 1, -1, 6).gap(w(2)).gap(w(2));
+      c.slide(c.x, "low", w(2), 1, -1, 6).gap(w(2)).gap(w(2.2)).run(w(4));
+      c.fall(c.x, 2).run(2 + w(4));
+      c.spike(c.x).run(w(3.5));
+      c.gap(w(2.6)).run(w(3));
+    } },
+    { lvl: 2, tier: 2, name: "landslide", build(c, k, w) {
+      c.run(2).up().run(w(3.5));
+      c.fall(c.x, 1).run(1 + w(5));
+      c.fall(c.x, 2).run(2 + w(5));
+      c.spike(c.x).run(w(4));
+      c.down().run(w(3)).gap(w(2.6)).run(w(3));
+    } },
+    { lvl: 2, tier: 3, name: "crumbling causeway", build(c, k, w) {
+      const bw = w(2);
+      c.run(3);
+      for (let i = 0; i < 3; i++) c.gap(w(2)).fall(c.x, bw, -1).gap(bw);
+      c.gap(w(2.2)).run(w(4));
+      c.spike(c.x, 2).run(w(3.5));
+      c.gap(w(2.6)).run(w(3));
+    } },
+    { lvl: 2, tier: 3, name: "gate and rockfall", build(c, k, w) {
+      c.run(2).spike(c.x).run(w(5.5) + 0.5);
+      c.slide(c.x, "gate", 1, 2).run(1 + w(3));
+      c.fall(c.x, 2).run(2 + w(5));
+      c.slide(c.x, "gate", 1, 2).run(1 + w(3));
+      c.gap(w(2.6)).run(w(4));
+    } },
+    { lvl: 2, tier: 3, name: "tidal stairs", build(c, k, w) {
+      const L = stepLen(k);
+      c.run(2).up().run(L).up().run(w(3));
+      c.gap(w(2)).slide(c.x, "low", w(2), 1, -1, 6).gap(w(2)).gap(w(2.2)).run(w(3.5));
+      c.down(2).run(w(2)).spike(c.x, 2).run(w(5));
+    } },
+
+    // ---- Zone 4: Canopy - low ceilings ----
+    { lvl: 3, tier: 1, name: "under the branches", build(c, k, w) {
+      c.run(2 + w(2)).low(c.x, 3).run(3 + w(3));
+      c.spike(c.x).run(w(5));
+      c.low(c.x, 4).run(4 + w(3));
+      c.block(c.x, 2, 1).run(2 + w(3));
+    } },
+    { lvl: 3, tier: 1, name: "ledge crawl", build(c, k, w) {
+      c.run(2).up().run(1 + w(3));
+      c.low(c.x, 3).run(3 + w(2.5));
+      c.down().run(w(3.5));
+      c.block(c.x, 2, 1).run(2 + w(4));
+      c.low(c.x, 2).run(2 + w(3));
+      c.spike(c.x).run(w(3));
+    } },
+    { lvl: 3, tier: 1, name: "duck and leap", build(c, k, w) {
+      c.run(2 + w(1.5)).low(c.x, 2).run(2 + w(2.5));
+      c.gap(w(2.6)).run(w(3.5));
+      c.low(c.x, 2).run(2 + w(3));
+      c.spike(c.x).run(w(3.5));
+      c.gap(w(2.6)).run(w(3));
+    } },
+    { lvl: 3, tier: 2, name: "canopy climb", build(c, k, w) {
+      c.run(2).pad(c.x).run(w(2.5));
+      c.up(3).run(w(6));
+      c.low(c.x, 3).run(3 + w(2.5));
+      c.down(3).run(w(4.5));
+      c.saw("ground", c.x).run(w(4));
+      c.spike(c.x).run(w(3));
+    } },
+    { lvl: 3, tier: 2, name: "tunnel stairs", build(c, k, w) {
+      c.run(2);
+      for (let i = 0; i < 2; i++) { c.up().run(w(2.5)); c.low(c.x, 3).run(3 + w(3)); }
+      c.run(w(1)).spike(c.x).run(w(3.5));
+      c.down(2).run(w(3.5));
+      c.block(c.x, 2, 1).run(2 + w(3));
+    } },
+    { lvl: 3, tier: 2, name: "duck and dive", build(c, k, w) {
+      c.run(2).up().run(w(3));
+      c.low(c.x, 3).run(3 + w(3));
+      c.down().run(w(1)).spike(c.x, 2).run(w(4.5));
+      c.gap(w(2.6)).run(w(3.5));
+      c.low(c.x, 2).run(2 + w(3));
+    } },
+    { lvl: 3, tier: 3, name: "duck jump rhythm", build(c, k, w) {
+      c.run(2 + w(1.5));
+      for (let i = 0; i < 3; i++) { c.low(c.x, 2).run(2 + w(2.5)); c.spike(c.x).run(w(5)); }
+    } },
+    { lvl: 3, tier: 3, name: "canopy gauntlet", build(c, k, w) {
+      c.run(2).up().run(w(3));
+      c.low(c.x, 3).run(3 + w(2.5));
+      c.spike(c.x).run(w(4));
+      c.down().run(w(3.5));
+      c.low(c.x, 2).run(2 + w(2));
+      c.gap(w(2.8)).run(w(2.5));
+      c.saw("ground", c.x + 1).run(1 + w(3.5));
+    } },
+    { lvl: 3, tier: 3, name: "hollow log", build(c, k, w) {
+      c.run(2 + w(1.5)).low(c.x, 6).run(6 + w(1.6));
+      c.gap(w(2.8)).run(w(3.5));
+      c.low(c.x, 3).run(3 + w(2.5));
+      c.spike(c.x, 2).run(w(3.5));
+      c.gap(w(2.6)).run(w(3));
+    } },
+
+    // ---- Zone 5: Glacier - gravity flips ----
+    { lvl: 4, tier: 1, name: "skywalk", build(c, k, w) {
+      c.run(3);
+      const x0 = c.x, x1 = x0 + w(20);
+      c.flip(x0, x1).cspike(x0 + w(8)).cspike(x0 + w(14));
+      c.run(x1 - x0 + w(4.5));
+    } },
+    { lvl: 4, tier: 1, name: "over the crevasse", build(c, k, w) {
+      c.run(3);
+      const x0 = c.x, x1 = x0 + w(24);
+      c.flip(x0, x1).cspike(x0 + w(9)).cspike(x0 + w(16));
+      c.run(w(5)).gap(w(5)).run(w(3)).gap(w(5));
+      c.run(x1 - c.x + w(4.5));
+    } },
+    { lvl: 4, tier: 1, name: "summit flip", build(c, k, w) {
+      c.run(2).up().run(w(3.5));
+      const x0 = c.x, x1 = x0 + w(20);
+      c.flip(x0, x1).cblock(x0 + w(8), 2).cspike(x0 + w(14));
+      c.run(x1 - x0 + w(4.5));
+    } },
+    { lvl: 4, tier: 2, name: "flip and land", build(c, k, w) {
+      c.run(3);
+      const x0 = c.x, x1 = x0 + w(21);
+      c.flip(x0, x1).cblock(x0 + w(8), 2).cblock(x0 + w(14), 3);
+      c.run(x1 - x0 + w(2));
+      c.slide(c.x, "low", 3).run(3 + w(4));
+      c.spike(c.x).run(w(3));
+    } },
+    { lvl: 4, tier: 2, name: "frost saws", build(c, k, w) {
+      c.run(3);
+      const x0 = c.x, x1 = x0 + w(22);
+      c.flip(x0, x1).csaw(x0 + w(9)).cspike(x0 + w(15), 2);
+      c.run(x1 - x0 + w(5.5));
+      c.saw("ground", c.x).run(w(4));
+    } },
+    { lvl: 4, tier: 2, name: "double flip", build(c, k, w) {
+      c.run(3);
+      let x0 = c.x, x1 = x0 + w(15);
+      c.flip(x0, x1).cspike(x0 + w(8));
+      c.run(x1 - x0 + w(6)).spike(c.x).run(w(4.5));
+      x0 = c.x; x1 = x0 + w(15);
+      c.flip(x0, x1).cspike(x0 + w(8), 2);
+      c.run(x1 - x0 + w(4.5));
+    } },
+    { lvl: 4, tier: 3, name: "inverted stairs", build(c, k, w) {
+      const L = stepLen(k);
+      c.run(3);
+      const x0 = c.x, s0 = x0 + w(8), x1 = s0 + 2 * L + w(8);
+      c.flip(x0, x1).cblock(s0, L, 1).cblock(s0 + L, L, 2).cspike(s0 + 2 * L + w(3.5));
+      c.run(x1 - x0 + w(4.5));
+    } },
+    { lvl: 4, tier: 3, name: "spike floor", build(c, k, w) {
+      c.run(3);
+      const x0 = c.x, x1 = x0 + w(22);
+      c.flip(x0, x1).cspike(x0 + w(9)).cspike(x0 + w(15), 2);
+      c.run(w(6));
+      for (let x = c.x; x < x1 - w(4); x += 1) c.spike(x);
+      c.run(x1 - c.x + w(4.5));
+    } },
+    { lvl: 4, tier: 3, name: "flip frenzy", build(c, k, w) {
+      c.run(3);
+      let x0 = c.x, x1 = x0 + w(13);
+      c.flip(x0, x1).cspike(x0 + w(8));
+      c.run(x1 - x0 + w(5.5)).gap(w(2.6)).run(w(3.5));
+      x0 = c.x; x1 = x0 + w(14);
+      c.flip(x0, x1).csaw(x0 + w(8.5));
+      c.run(x1 - x0 + w(5)).spike(c.x, 2).run(w(3));
+    } },
+
+    // ---- Zone 6: The Void - everything mixed ----
+    { lvl: 5, tier: 1, name: "void steps", build(c, k, w) {
+      const L = stepLen(k);
+      c.run(2).up().run(L).up().run(w(3));
+      c.saw("ground", c.x).run(w(4));
+      c.down(2).run(w(3.5)).gap(w(2.6)).run(w(3.5));
+      c.low(c.x, 3).run(3 + w(3));
+    } },
+    { lvl: 5, tier: 1, name: "bridge and tunnel", build(c, k, w) {
+      c.run(3).gap(w(2)).fall(c.x, 2, -1).gap(2).gap(w(2)).run(w(3.5));
+      c.low(c.x, 3).run(3 + w(3));
+      c.spike(c.x).run(w(3.5));
+      c.gap(w(2.6)).run(w(3));
+      c.saw("ground", c.x).run(w(3));
+    } },
+    { lvl: 5, tier: 1, name: "flip saw", build(c, k, w) {
+      c.run(3);
+      const x0 = c.x, x1 = x0 + w(18);
+      c.flip(x0, x1).csaw(x0 + w(9));
+      c.run(x1 - x0 + w(6));
+      c.saw("ground", c.x).run(w(4));
+    } },
+    { lvl: 5, tier: 2, name: "tower gate", build(c, k, w) {
+      c.run(2).pad(c.x).run(w(2.5));
+      c.up(3).run(w(6));
+      c.slide(c.x, "gate", 1, 2).run(1 + w(3));
+      c.down(3).run(w(2)).spike(c.x, 2).run(w(4.5));
+      c.gap(w(2.6)).run(w(3));
+      c.spike(c.x).run(w(3));
+    } },
+    { lvl: 5, tier: 2, name: "tunnel drop", build(c, k, w) {
+      const L = stepLen(k);
+      c.run(2).up().run(L).up().run(w(2.5));
+      c.low(c.x, 3).run(3 + w(3));
+      c.down(2).run(w(2)).spike(c.x, 2).run(2 + w(5));
+      c.saw("hang", c.x).run(w(3));
+    } },
+    { lvl: 5, tier: 2, name: "sliders and saws", build(c, k, w) {
+      c.run(3).slide(c.x, "low", 2).run(2 + w(4.5));
+      c.saw("ground", c.x).run(w(4));
+      c.gap(w(2)).slide(c.x, "low", w(2), 1, -1, 6).gap(w(2)).gap(w(2.2)).run(w(3));
+      c.saw("track", c.x + 1).run(1 + w(4));
+    } },
+    { lvl: 5, tier: 3, name: "everything", build(c, k, w) {
+      const L = stepLen(k);
+      c.run(2).up().run(L).up().run(w(3));
+      c.low(c.x, 3).run(3 + w(3));
+      c.down(2).run(w(2)).spike(c.x, 2).run(2 + w(4));
+      c.gap(w(2)).fall(c.x, 2, -1).gap(2).gap(w(2.2)).run(w(3));
+      c.saw("ground", c.x).run(w(3));
+    } },
+    { lvl: 5, tier: 3, name: "flip gauntlet", build(c, k, w) {
+      c.run(3);
+      const x0 = c.x, x1 = x0 + w(22);
+      c.flip(x0, x1).csaw(x0 + w(8)).cblock(x0 + w(13), 2).cspike(x0 + w(18));
+      c.run(x1 - x0 + w(2));
+      c.slide(c.x, "low", 3).run(3 + w(3.5));
+      c.gap(w(2.8)).run(w(3));
+    } },
+    { lvl: 5, tier: 3, name: "final exam", build(c, k, w) {
+      c.run(2).gap(w(2.4)).up().run(w(3.5));
+      c.saw("track", c.x).run(w(4));
+      c.low(c.x, 3).run(3 + w(2.5));
+      c.down().run(w(1)).spike(c.x, 2).run(2 + w(4));
+      c.gap(w(2)).fall(c.x, 2, -1).gap(2).gap(w(2.2)).run(w(3.5));
+      c.spike(c.x).run(w(3));
+    } },
   ];
+  function buildChunk(ch, k) {
+    const c = builder(k);
+    ch.build(c, k, n => Math.max(1, Math.round(n * k)));
+    return c;
+  }
 
   let nextId = 1;
-  function materialize(s, x0, k) {
-    const o = { t: s.t, id: nextId++, seed: (Math.random() * 1e9) | 0, used: false, row: s.row || 0, ceil: !!s.ceil };
-    const X = x0 + s.x * B;
+  // Converts a chunk-space object (blocks, relative heights) into a world object
+  // (pixels, absolute heights). x0 is the chunk's world x, hb its floor level.
+  function place(s, x0, k, hb) {
+    const o = { t: s.t, id: nextId++, seed: (Math.random() * 1e9) | 0, used: false };
+    const X = x0 + s.x * B, H = v => (hb + v) * B;
     switch (s.t) {
-      case "s": o.x = X; o.w = B; break;
-      case "b": o.x = X; o.w = s.w * B; o.hh = s.h; break;
-      case "p": case "o": o.x = X; o.w = B; break;
-      case "gp": o.x = X; o.w = B; o.flip = s.flip; break;
-      case "roof": o.x = X; o.w = s.w * B; break;
-      case "lc": o.x = X; o.w = s.w * B; o.bottom = LOW_CEIL; break;
-      case "fb": Object.assign(o, { x: X, w: s.w * B, hh: s.h, start: 240, bot: 240, vy: 0, state: "wait", timer: 0 }); break;
-      case "mb":
-        Object.assign(o, { x: X, w: s.w * B, hh: s.h, kind: s.kind, d0: 3 * B * k, L: 7 * B });
-        if (s.kind === "gate") { o.rest = 64; o.far = 0; } else { o.rest = 0; o.far = 96; }
+      case "f": Object.assign(o, { x: X, w: s.w * B, top: H(s.top), bot: -4000 }); break;
+      case "s": Object.assign(o, { x: X, w: B, base: H(s.base), dir: s.dir }); break;
+      case "b": Object.assign(o, { x: X, w: s.w * B, bot: H(s.bot), top: H(s.top) }); break;
+      case "p": Object.assign(o, { x: X, w: B, base: H(s.base) }); break;
+      case "o": Object.assign(o, { x: X, w: B, cy: H(s.cy) }); break;
+      case "gp": Object.assign(o, { x: X, w: B, flip: s.flip, base: H(s.base), ceil: H(s.base) + CEIL_H }); break;
+      case "roof": Object.assign(o, { x: X, w: s.w * B, ceil: H(s.ceil) }); break;
+      case "lc": Object.assign(o, { x: X, w: s.w * B, bottom: H(s.bottom) + LOW_CEIL }); break;
+      case "fb": Object.assign(o, { x: X, w: s.w * B, hh: s.h, land: H(s.land), start: H(s.land) + 6 * B, bot: H(s.land) + 6 * B, vy: 0, state: "wait", timer: 0 }); break;
+      case "mb": {
+        const base = H(s.base);
+        Object.assign(o, { x: X, w: s.w * B, hh: s.h, kind: s.kind, d0: s.settle * B * k, L: 7 * B });
+        if (s.kind === "gate") { o.rest = base + 64; o.far = base; } else { o.rest = base; o.far = base + 96; }
         o.bot = o.far;
         break;
+      }
       case "saw": {
-        const r = s.kind === "hang" ? 24 : 26;
-        Object.assign(o, { kind: s.kind, cx: X, r, x: X - r, w: 2 * r });
-        if (s.kind === "ground") o.ch = s.ceil ? CEIL_H - 10 : 10;
-        else if (s.kind === "hang") o.ch = 96;
-        else Object.assign(o, { rest: 112, far: 22, ch: 22, d0: 3 * B * k, L: 7 * B });
+        const r = s.kind === "hang" ? 24 : 26, base = H(s.base);
+        Object.assign(o, { kind: s.kind, cx: X, r, x: X - r, w: 2 * r, base });
+        if (s.kind === "ground") o.ch = base + 10;
+        else if (s.kind === "ceil") o.ch = base - 10;
+        else if (s.kind === "hang") o.ch = base + 96;
+        else Object.assign(o, { rest: base + 112, far: base + 22, ch: base + 22, d0: 3 * B * k, L: 7 * B });
         break;
       }
     }
@@ -1383,19 +1801,20 @@
     mode: "title", paused: false,
     level: 0, levelTime: 0, attempts: 0,
     player: { x: 0, h: 0, vy: 0, rot: 0, grounded: true },
-    objs: [], nextX: 0, portalX: null, introPending: false,
+    objs: [], nextX: 0, hb: 0, portalX: null, portalH: 0, runway: null, introPending: false,
     dead: false, deadT: 0,
-    held: false, buffer: 0, duckInput: false, ducking: false, flipped: false,
+    held: false, buffer: 0, duckInput: false, ducking: false, flipped: false, ceilH: CEIL_H, surf: 0,
     envFrom: 0, envTo: 0, envT: 1, titleT: 0,
     shake: 0, flash: 0,
     sim: false, fixedSpeed: 0, noSpawn: false,
   };
   const particles = [];
+  let camH = 0;   // vertical camera: how far above the base floor the view is centred (px)
 
   function speed() { return S.fixedSpeed || Math.min(640, 330 + S.level * 26 + (S.levelTime / LEVEL_SECONDS) * 50); }
-  function difficulty() { return S.level + Math.min(1, S.levelTime / LEVEL_SECONDS); }
   const camLeft = () => S.player.x - playerSX;
   const playerH = () => (S.ducking ? DUCK_H : P);
+  const titleFloor = () => [{ t: "f", id: 0, x: -1e7, w: 2e7, top: 0, bot: -4000 }];
 
   function setEnv(i) {
     if (i === S.envTo && S.envT >= 1) return;
@@ -1408,14 +1827,18 @@
   // ---- Level flow ---------------------------------------------------------
   function restartLevel() {
     S.player = { x: 0, h: 0, vy: 0, rot: 0, grounded: true };
-    S.objs = [];
-    S.nextX = 14 * B;
+    S.nextX = 16 * B;
+    S.objs = [place({ t: "f", x: 0, w: 36, top: 0 }, -20 * B, 1, 0)];
+    S.hb = 0;
     S.portalX = null;
+    S.runway = null;
     S.levelTime = 0;
     S.dead = false;
     S.deadT = 0;
     S.flipped = false;
     S.ducking = false;
+    S.surf = 0;
+    camH = 0;
     S.introPending = true;
     S.attempts++;
   }
@@ -1437,7 +1860,7 @@
   function quitToTitle() {
     S.mode = "title";
     S.paused = false;
-    S.objs = [];
+    S.objs = titleFloor();
     S.portalX = null;
     S.dead = false;
     S.flipped = false;
@@ -1453,7 +1876,10 @@
     S.levelTime = 0;
     S.portalX = null;
     S.introPending = true;
-    S.nextX = camLeft() + viewW + 3 * B;
+    // keep running on the portal's runway until the next zone's first chunk
+    const need = snapBeat(camLeft() + viewW + 3 * B);
+    if (S.runway) { S.runway.w = Math.max(S.runway.w, need - S.runway.x); S.nextX = S.runway.x + S.runway.w; S.runway = null; }
+    else S.nextX = need;
     setEnv(S.level % STYLES.length);
     S.flash = 0.8;
     if (S.level + 1 > bestLevel) { bestLevel = S.level + 1; store.set("beatline-best-level", bestLevel); }
@@ -1523,84 +1949,106 @@
   }
 
   // ---- Spawning -----------------------------------------------------------
-  function pickPattern(d) {
+  const MAX_HB = 6;                        // highest floor level, in blocks
+  const snapBeat = x => Math.ceil(x / (2 * B) - 1e-9) * 2 * B;   // chunks start on an 8th note (2 blocks)
+  // Chance of each tier by time into the level: easy early, hardest in the last 20 s.
+  function tierWeights(t) { return t < 20 ? [1, 0.15, 0] : t < 40 ? [0.6, 1, 0.1] : t < 60 ? [0.25, 1, 0.45] : [0, 0.3, 1]; }
+  function pickChunk(k, tAt, maxLen) {
+    const lvl = S.level % STYLES.length, loop = S.level >= STYLES.length;
+    const tw = tierWeights(tAt);
+    let pool = CHUNKS.filter(ch => ch.tier > 0 && (loop || ch.lvl <= lvl));
     if (S.introPending) {
       S.introPending = false;
-      const lvl = S.level;
-      const intro = lvl >= 1 && lvl < STYLES.length ? PATTERNS.filter(p => p.tag && p.d === lvl) : [];
-      if (intro.length) return intro[Math.floor(Math.random() * intro.length)];
+      if (!loop && lvl > 0) pool = pool.filter(ch => ch.lvl === lvl && ch.tier === 1);
     }
-    const pool = PATTERNS.filter(p => p.d <= d);
-    let total = 0;
-    const w = pool.map(p => { const x = p.d > d - 1.2 ? 2.2 : 1; total += x; return x; });
-    let r = Math.random() * total;
-    for (let i = 0; i < pool.length; i++) { r -= w[i]; if (r <= 0) return pool[i]; }
-    return pool[pool.length - 1];
+    // weighted random order; the current zone's own chunks come up most often
+    const order = pool
+      .map(ch => ({ ch, key: -Math.log(Math.random() + 1e-12) / Math.max(1e-6, tw[ch.tier - 1] * (loop || ch.lvl === lvl ? 6 : 1)) }))
+      .filter(e => tw[e.ch.tier - 1] > 0)
+      .sort((a, b) => a.key - b.key)
+      .map(e => e.ch)
+      .concat(CHUNKS.filter(ch => ch.tier === 0));
+    for (const ch of order) {
+      const c = buildChunk(ch, k);
+      if (S.hb + c.lo < 0 || S.hb + c.hi > MAX_HB || c.x > maxLen) continue;
+      c.name = ch.name;
+      return c;
+    }
+    return null;
+  }
+  function placePortal() {
+    S.portalX = S.nextX + 2 * B;
+    S.portalH = S.hb * B;
+    S.runway = place({ t: "f", x: 0, w: 30, top: 0 }, S.nextX, 1, S.hb);
+    S.objs.push(S.runway);
+    S.nextX = null;
   }
   function spawn() {
-    const right = camLeft() + viewW + 2 * B;
+    const right = camLeft() + viewW + 3 * B;
+    let added = false;
     while (S.nextX !== null && S.nextX < right) {
       const sp = speed(), k = sp / 330;
-      const eta = (S.nextX - S.player.x) / sp;
-      if (S.levelTime + eta >= LEVEL_SECONDS - 0.25) {
-        S.portalX = S.nextX + B;
-        S.nextX = null;
-        break;
-      }
-      const d = Math.min(difficulty() + eta / LEVEL_SECONDS, S.level + 1);
-      // Only use a chunk that ends before the clock runs out, so the portal lands on time.
-      let pat = null, chunk = null;
-      for (let tries = 0; tries < 8 && !pat; tries++) {
-        pat = pickPattern(d); chunk = pat.b(k);
-        if (S.levelTime + eta + (chunk.len * B) / sp > LEVEL_SECONDS - 0.25) pat = null;
-      }
-      if (!pat) { S.portalX = S.nextX + B; S.nextX = null; break; }
-      const objs = chunk.o.map(s => Object.assign(materialize(s, S.nextX, k), { pat: PATTERNS.indexOf(pat) })).sort((a, b) => a.x - b.x);
-      for (const o of objs) {
+      const tAt = S.levelTime + (S.nextX - S.player.x) / sp;
+      const room = ((LEVEL_SECONDS - 0.25 - tAt) * sp) / B;
+      const c = room > 2 ? pickChunk(k, tAt, room) : null;
+      if (!c) { placePortal(); added = true; break; }
+      for (const s of [...c.floors, ...c.o]) {
+        const o = place(s, S.nextX, k, S.hb);
+        o.chunk = c.name;
         if (o.t === "lc" && !tipsSeen.duck) o.tip = "duck";
         if (o.t === "gp" && o.flip && !tipsSeen.flip) o.tip = "flip";
+        S.objs.push(o);
       }
-      S.objs.push(...objs);
-      const maxGap = Math.max(4, 8.5 - d * 0.9);
-      const minGap = Math.max(3.2, maxGap - 3);
-      S.nextX += (chunk.len + rand(minGap, maxGap) * k) * B;
+      if (S.chunkLog) S.chunkLog.push({ name: c.name, t: +tAt.toFixed(1) });
+      S.hb += c.f;
+      S.nextX += c.x * B;
+      // breather: a short flat stretch, sometimes with a one-block step, then snap to the beat
+      const bw = (1.5 + Math.random() * 1.5) * k;
+      S.objs.push(place({ t: "f", x: 0, w: bw, top: 0 }, S.nextX, k, S.hb));
+      S.nextX += bw * B;
+      const r = Math.random();
+      const dh = r < 0.25 && S.hb < 3 ? 1 : r > 0.7 && S.hb > 0 ? -1 : 0;
+      S.hb += dh;
+      const end = snapBeat(S.nextX + (dh ? 3 * k * B : 0));
+      if (end > S.nextX) S.objs.push(place({ t: "f", x: 0, w: (end - S.nextX) / B, top: 0 }, S.nextX, k, S.hb));
+      S.nextX = end;
+      added = true;
     }
-    const cut = camLeft() - 2 * B;
+    if (added) S.objs.sort((a, b) => a.x - b.x);
+    const cut = camLeft() - 3 * B;
     if (S.objs.length && S.objs[0].x + S.objs[0].w < cut) S.objs = S.objs.filter(o => o.x + o.w >= cut);
   }
 
   // ---- Physics ------------------------------------------------------------
   // Moving obstacles are driven by the player's distance, not the clock, so
   // each one is guaranteed to be in its resting pose when the player reaches it.
+  const KILL_H = -100;                     // falling this far below the base floor means you fell into a pit
   const bob = (d, d0, L) => (d <= d0 ? 0 : 0.5 - 0.5 * Math.cos((TAU * (d - d0)) / L));
   function updateDynamics(dt) {
     const p = S.player, sp = speed();
     for (const o of S.objs) {
       const d = o.x - p.x;
+      if (d > 30 * B) break;
       if (o.t === "mb") o.bot = o.rest + (o.far - o.rest) * bob(d, o.d0, o.L);
       else if (o.t === "saw" && o.kind === "track") o.ch = o.rest + (o.far - o.rest) * bob(d, o.d0, o.L);
       else if (o.t === "fb") {
         if (o.state === "wait") {
-          if (d <= (SHAKE_T + Math.sqrt((2 * o.start) / G) + 0.35) * sp) { o.state = "shake"; o.timer = 0; if (!S.sim) audio.rumble(); }
+          if (d <= (SHAKE_T + Math.sqrt((2 * (o.start - o.land)) / G) + 0.35) * sp) { o.state = "shake"; o.timer = 0; if (!S.sim) audio.rumble(); }
         } else if (o.state === "shake") {
           o.timer += dt;
           if (o.timer >= SHAKE_T) o.state = "fall";
         } else if (o.state === "fall") {
           o.vy -= G * dt;
           o.bot += o.vy * dt;
-          if (o.bot <= 0) {
-            o.bot = 0; o.state = "rest";
-            if (!S.sim) { emit("dust", o.x + o.w / 2, 4, 14, 200); S.shake = reducedMotion ? 0 : 5; audio.thud(); }
+          if (o.bot <= o.land) {
+            o.bot = o.land; o.state = "rest";
+            if (!S.sim) { emit("dust", o.x + o.w / 2, o.land + 4, 14, 200); S.shake = reducedMotion ? 0 : 5; audio.thud(); }
           }
         }
       }
     }
   }
-  function span(o) {
-    if (o.ceil) { const top = CEIL_H - o.row * B; return [top - o.hh * B, top]; }
-    const bot = o.t === "b" ? o.row * B : o.bot;
-    return [bot, bot + o.hh * B];
-  }
+  function span(o) { return o.t === "f" || o.t === "b" ? [o.bot, o.top] : [o.bot, o.bot + o.hh * B]; }
   function step(dt) {
     const p = S.player;
     if (S.duckInput !== S.ducking) {
@@ -1613,17 +2061,16 @@
     p.vy += gs * G * dt;
     p.h += p.vy * dt;
     let grounded = false;
-    if (!S.flipped && p.h <= 0) { p.h = 0; p.vy = 0; grounded = true; }
-    if (S.flipped && p.h + ph >= CEIL_H) { p.h = CEIL_H - ph; p.vy = 0; grounded = true; }
+    if (S.flipped && p.h + ph >= S.ceilH) { p.h = S.ceilH - ph; p.vy = 0; grounded = true; }
 
     for (const o of S.objs) {
       if (o.x > p.x + P) break;
       if (o.x + o.w < p.x) continue;
       switch (o.t) {
-        case "b": case "mb": case "fb": {
+        case "f": case "b": case "mb": case "fb": {
           const [bot, top] = span(o);
           if (p.h < top && p.h + ph > bot) {
-            if (!S.flipped && h0 >= top - 10 && p.vy <= 0) { p.h = top; p.vy = 0; grounded = true; }
+            if (!S.flipped && h0 >= top - 10 && p.vy <= 0) { p.h = top; p.vy = 0; grounded = true; S.surf = top; }
             else if (S.flipped && h0 + ph <= bot + 10 && p.vy >= 0) { p.h = bot - ph; p.vy = 0; grounded = true; }
             else return die();
           }
@@ -1632,8 +2079,7 @@
         case "s": {
           const cx = o.x + B / 2;
           if (p.x + P - 4 > cx - 8 && p.x + 4 < cx + 8) {
-            const base = o.ceil ? CEIL_H - o.row * B : o.row * B;
-            const lo = o.ceil ? base - 26 : base, hi = o.ceil ? base : base + 26;
+            const lo = o.dir > 0 ? o.base : o.base - 26, hi = o.dir > 0 ? o.base + 26 : o.base;
             if (p.h + 4 < hi && p.h + ph - 4 > lo) return die();
           }
           break;
@@ -1647,35 +2093,48 @@
           if (p.x + P - 3 > o.x && p.x + 3 < o.x + o.w && p.h + ph - 1 > o.bottom) return die();
           break;
         case "p":
-          if (!o.used && !S.flipped && p.x + P > o.x + 6 && p.x < o.x + B - 6 && p.h <= o.row * B + 12) {
+          if (!o.used && !S.flipped && p.x + P > o.x + 6 && p.x < o.x + B - 6 && p.h <= o.base + 12 && p.h >= o.base - 4) {
             p.vy = PAD_V; o.used = true; grounded = false;
-            if (!S.sim) { emit("spark", o.x + B / 2, 6, 14, 260); audio.boing(); }
+            if (!S.sim) { emit("spark", o.x + B / 2, o.base + 6, 14, 260); audio.boing(); }
           }
           break;
         case "o": {
-          const dx = p.x + P / 2 - (o.x + B / 2), dy = p.h + ph / 2 - (o.row * B + B / 2);
+          const dx = p.x + P / 2 - (o.x + B / 2), dy = p.h + ph / 2 - o.cy;
           if (!o.used && S.buffer > 0 && dx * dx + dy * dy < 40 * 40) {
             p.vy = -gs * ORB_V; o.used = true; S.buffer = 0; grounded = false;
-            if (!S.sim) emit("spark", o.x + B / 2, o.row * B + B / 2, 16, 240);
+            if (!S.sim) emit("spark", o.x + B / 2, o.cy, 16, 240);
           }
           break;
         }
         case "gp":
           if (!o.used && p.x + P / 2 >= o.x + B / 2) {
-            o.used = true; S.flipped = o.flip; p.vy = 0; grounded = false;
+            o.used = true; S.flipped = o.flip; S.ceilH = o.ceil; p.vy = 0; grounded = false;
             if (!S.sim) { S.flash = 0.45; emit("spark", o.x + B / 2, p.h + ph / 2, 24, 300); audio.flip(o.flip); }
             return;
           }
           break;
       }
     }
+    if (p.h < KILL_H) return die();
     p.grounded = grounded;
     if (grounded && (S.held || S.buffer > 0)) { p.vy = (S.flipped ? -1 : 1) * JUMP_V; p.grounded = false; S.buffer = 0; }
   }
   function physicsSteps(dt) {
-    const n = Math.ceil(dt / (1 / 240)), h = dt / n;
+    const n = Math.ceil(dt / (1 / 240) - 1e-9), h = dt / n;
     for (let i = 0; i < n && !S.dead; i++) step(h);
     S.buffer = Math.max(0, S.buffer - dt);
+  }
+  // The camera keeps the running surface in view and dips early for drops ahead.
+  function updateCamera(dt) {
+    const p = S.player;
+    let target = S.flipped ? S.ceilH - CEIL_H + 50 : S.surf;   // flipped: keep the ceiling clear of the HUD
+    if (!S.flipped) {
+      for (const o of S.objs) {
+        if (o.x > p.x + 8 * B) break;
+        if (o.t === "f" && o.x + o.w > p.x) target = Math.min(target, o.top);
+      }
+    }
+    camH += (Math.max(0, target) - camH) * (1 - Math.exp(-dt * 3.5));
   }
 
   // ---- Particles ----------------------------------------------------------
@@ -1694,54 +2153,91 @@
       if (q.life <= 0) { particles.splice(i, 1); continue; }
       if (q.g) q.vy -= 1400 * dt;
       q.x += q.vx * dt; q.h += q.vy * dt; q.rot += dt * 5;
-      if (q.h < 0 && q.g) { q.h = 0; q.vy *= -0.35; q.vx *= 0.7; }
     }
   }
 
   // ---- Rendering ----------------------------------------------------------
   // One dispatcher walks the world; every zone supplies its own drawing
   // functions, so no two zones share rendering code for scenery or obstacles.
+  function drawTerrain(g, st, t) {
+    // touching floor pieces at the same height are drawn as one span (no seams)
+    const floors = [];
+    for (const o of S.objs) {
+      if (o.t !== "f") continue;
+      const last = floors[floors.length - 1];
+      if (last && last.top === o.top && Math.abs(last.x + last.w - o.x) < 1) last.w = o.x + o.w - last.x;
+      else floors.push({ x: o.x, w: o.w, top: o.top });
+    }
+    const sn = v => (st.pixel ? Math.round(v / PX) * PX : v);
+    for (const f of floors) {
+      const x0 = f.x - camX, x1 = x0 + f.w;
+      if (x1 < -40 || x0 > viewW + 40) continue;
+      const cx0 = sn(Math.max(x0, -40)), cx1 = sn(Math.min(x1, viewW + 40));
+      g.save();
+      g.beginPath(); g.rect(cx0 - 0.5, wTop - 60, cx1 - cx0 + 1, wBot - wTop + 120); g.clip();
+      g.translate(0, -f.top);
+      st.ground(g, cx0 - 1, cx1 + 1, wBot + f.top, t);
+      g.restore();
+    }
+    // exposed side faces: where a floor meets a pit or a lower floor
+    for (let i = 0; i < floors.length; i++) {
+      const f = floors[i], prev = floors[i - 1], next = floors[i + 1];
+      const x0 = sn(f.x - camX), x1 = sn(f.x + f.w - camX), y = GROUND - f.top;
+      if (x1 < -40 || x0 > viewW + 40) continue;
+      const touchPrev = prev && Math.abs(prev.x + prev.w - f.x) < 1;
+      const touchNext = next && Math.abs(f.x + f.w - next.x) < 1;
+      if (!touchPrev) st.side(g, x0, y, wBot);
+      else if (prev.top < f.top) st.side(g, x0, y, GROUND - prev.top);
+      if (!touchNext) st.side(g, x1, y, wBot);
+      else if (next.top < f.top) st.side(g, x1, y, GROUND - next.top);
+    }
+  }
   function drawWorld(g, st, t) {
+    const sn = v => (st.pixel ? Math.round(v / PX) * PX : v);
+    const cs = sn(camH);
+    bgShift = sn(camH * 0.2);
     g.save();
-    st.bg(g, t);
+    g.save(); g.translate(0, bgShift); st.bg(g, t); g.restore();
     st.fx.draw(g, t);
-    for (const o of S.objs) if (o.t === "roof") { const x = o.x - camX; if (x < viewW + 20 && x + o.w > -20) st.roof(g, x, o.w, t, o.seed); }
-    st.ground(g, t);
-    const top = -offY - 10, right = viewW + 80;
+    g.translate(0, cs);
+    wTop = -offY - cs - 20; wBot = viewH - offY - cs + 20;
+    for (const o of S.objs) if (o.t === "roof") { const x = o.x - camX; if (x < viewW + 20 && x + o.w > -20) st.roof(g, x, o.w, GROUND - o.ceil, t, o.seed); }
+    drawTerrain(g, st, t);
+    const right = viewW + 80;
     for (const o of S.objs) {
       const x = o.x - camX;
       if (x > right) break;
       if (x + o.w < -80) continue;
       switch (o.t) {
-        case "s": st.spike(g, x, o.ceil ? GROUND - CEIL_H + o.row * B : GROUND - o.row * B, o.ceil ? -1 : 1, o.seed); break;
-        case "b": { const [bot, tp] = span(o); st.block(g, x, GROUND - tp, o.w, tp - bot, o.seed); break; }
+        case "s": st.spike(g, x, GROUND - o.base, o.dir, o.seed); break;
+        case "b": st.block(g, x, GROUND - o.top, o.w, o.top - o.bot, o.seed); break;
         case "mb": {
           const tp = o.bot + o.hh * B;
-          st.track(g, x + o.w / 2, GROUND - (Math.max(o.rest, o.far) + o.hh * B + 12), GROUND);
+          st.track(g, x + o.w / 2, GROUND - (Math.max(o.rest, o.far) + o.hh * B + 12), GROUND - Math.min(o.rest, o.far));
           st.block(g, x, GROUND - tp, o.w, o.hh * B, o.seed);
           break;
         }
         case "fb": {
           const tp = o.bot + o.hh * B;
           const sx = o.state === "shake" && !reducedMotion ? x + Math.sin(t * 90) * 2.5 : x;
-          if (o.state === "wait" || o.state === "shake") st.chain(g, sx + o.w / 2, top, GROUND - tp);
+          if (o.state === "wait" || o.state === "shake") st.chain(g, sx + o.w / 2, wTop, GROUND - tp);
           st.block(g, sx, GROUND - tp, o.w, o.hh * B, o.seed);
           break;
         }
         case "saw": {
           const cx = o.cx - camX, cy = GROUND - o.ch;
-          if (o.kind === "hang") st.chain(g, cx, top, cy - o.r * 0.5);
-          if (o.kind === "track") st.track(g, cx, GROUND - (o.rest + o.r + 10), GROUND);
+          if (o.kind === "hang") st.chain(g, cx, wTop, cy - o.r * 0.5);
+          if (o.kind === "track") st.track(g, cx, GROUND - (o.rest + o.r + 10), GROUND - o.base);
           st.saw(g, cx, cy, o.r, t * 7, o.seed);
           break;
         }
-        case "p": st.pad(g, x, GROUND - o.row * B, o.used, t); break;
-        case "o": st.orb(g, x + B / 2, GROUND - (o.row * B + B / 2), o.used, t); break;
+        case "p": st.pad(g, x, GROUND - o.base, o.used, t); break;
+        case "o": st.orb(g, x + B / 2, GROUND - o.cy, o.used, t); break;
         case "lc": st.barrier(g, x, o.w, GROUND - o.bottom, t, o.seed); break;
-        case "gp": st.gportal(g, x + B / 2, GROUND - CEIL_H / 2, o.flip, t); break;
+        case "gp": st.gportal(g, x + B / 2, GROUND - (o.base + CEIL_H / 2), o.flip, t); break;
       }
     }
-    if (S.portalX !== null && S.mode === "play") st.lportal(g, S.portalX - camX, GROUND - 110, t);
+    if (S.portalX !== null && S.mode === "play") st.lportal(g, S.portalX - camX, GROUND - (S.portalH + 110), t);
     for (const q of particles) st.particle(g, q.x - camX, GROUND - q.h, q, clamp(q.life / q.max, 0, 1));
     if (!S.dead) {
       const p = S.player, ph = playerH();
@@ -1814,7 +2310,7 @@
 
   // ---- Audio: a small procedural soundtrack per zone ----------------------
   const audio = (() => {
-    let ac = null, master = null, noise = null, nextT = 0, stepN = 0;
+    let ac = null, master = null, noise = null, stepX = null;
     const midi = m => 440 * Math.pow(2, (m - 69) / 12);
     const BASS = [0, 0, 12, 0, 10, 0, 7, 3];
     const ARP = [12, 15, 19, 15, 24, 19, 15, 19];
@@ -1849,31 +2345,43 @@
       env(g, t, 0.002, peak, dur);
       s.connect(f).connect(g).connect(master); s.start(t); s.stop(t + dur + 0.02);
     }
+    // Step n is the 16th note for block n: the tempo follows the run speed
+    // (a beat is four blocks), and above ~180 bpm the drums drop to half time.
     function playStep(n, t) {
-      const st = styleOf(S.level), root = st.note;
-      if (n % 4 === 0) tone("sine", 150, t, 0.16, 0.9, 40);
+      const st = styleOf(S.level), root = st.note, fast = speed() > 470;
+      if (fast ? n % 8 === 0 : n % 4 === 0) tone("sine", 150, t, 0.16, 0.9, 40);
+      if (fast && n % 8 === 4) hiss(t, 0.12, 0.3, 0, 2600);
       if (n % 4 === 2) hiss(t, 0.05, 0.25, 7000);
-      if (n % 2 === 0) {
+      if (fast ? n % 4 === 0 : n % 2 === 0) {
         const o = ac.createOscillator(), g = ac.createGain(), f = ac.createBiquadFilter();
-        o.type = st.bass; o.frequency.value = midi(root + BASS[(n / 2) % 8]);
+        o.type = st.bass; o.frequency.value = midi(root + BASS[(fast ? n >> 2 : n >> 1) % 8]);
         f.type = "lowpass"; f.frequency.value = st.cutoff + S.level * 40;
         env(g, t, 0.01, 0.28, 0.18);
         o.connect(f).connect(g).connect(master); o.start(t); o.stop(t + 0.2);
-      } else if (S.level > 0 || n % 4 === 1) {
+      } else if (fast ? n % 4 === 2 : S.level > 0 || n % 4 === 1) {
         tone(st.lead, midi(root + 12 + ARP[(n >> 1) % 8]), t, 0.12, 0.08);
       }
     }
+    // The music is tied to distance: one 16th note per block travelled, so
+    // obstacles on the block grid land on the beat. Each note sounds a jump's
+    // lead time early, which puts the ideal jump for an obstacle on a grid
+    // line right on the note.
+    const LEAD = 0.24;
     setInterval(() => {
-      if (!ac || !soundOn || S.mode !== "play" || S.paused || S.dead || S.sim) return;
-      const bpm = Math.min(176, 120 + S.level * 7);
-      const spb = 60 / bpm / 4;
-      if (nextT < ac.currentTime) nextT = ac.currentTime + 0.05;
-      while (nextT < ac.currentTime + 0.12) { playStep(stepN, nextT); nextT += spb; stepN = (stepN + 1) % 16; }
+      if (!ac || !soundOn || S.mode !== "play" || S.paused || S.dead || S.sim) { stepX = null; return; }
+      const sp = speed(), px = S.player.x;
+      if (stepX === null || stepX - px > 12 * B || stepX < px - 2 * B) stepX = Math.ceil((px + LEAD * sp) / B) * B;
+      for (;;) {
+        const wait = (stepX - px) / sp - LEAD;
+        if (wait > 0.12) break;
+        if (wait > -0.03) playStep(Math.round(stepX / B), ac.currentTime + Math.max(0, wait));
+        stepX += B;
+      }
     }, 25);
     const ok = () => ac && soundOn;
     return {
       init,
-      resync() { if (ac) nextT = ac.currentTime + 0.05; },
+      resync() { stepX = null; },
       setOn(on) { if (master) master.gain.value = on ? 0.32 : 0; },
       crash() { if (!ok()) return; const t = ac.currentTime; hiss(t, 0.45, 0.8, 0, 1200); tone("square", 220, t, 0.35, 0.2, 40); },
       boing() { if (!ok()) return; tone("square", 300, ac.currentTime, 0.2, 0.12, 900); },
@@ -2000,6 +2508,7 @@
       p.x += 300 * dt;
       S.titleT += dt;
       if (S.titleT > 5) { S.titleT = 0; setEnv((S.envTo + 1) % STYLES.length); }
+      updateCamera(dt);
       return;
     }
     if (S.dead) {
@@ -2012,6 +2521,7 @@
     spawn();
     updateDynamics(dt);
     physicsSteps(dt);
+    updateCamera(dt);
     if (S.dead) return;
 
     if (p.grounded) {
@@ -2043,33 +2553,44 @@
 
   // ---- Play-check solver (used by the automated tests) ---------------------
   // Breadth-first search over jump/duck inputs, sharing the exact physics the
-  // game runs. Returns whether any input sequence survives.
-  function solve({ level = 0, pattern = null, k = 1, cap = 400, dt = 1 / 30, maxTicks = 30 * 150 } = {}) {
-    const saved = { mode: S.mode, paused: S.paused, level: S.level, envTo: S.envTo };
+  // game runs. With `chunk` it tests one chunk at a fixed speed factor k and
+  // starting floor hb; otherwise it plays a whole generated level. `phase`
+  // shifts the input-decision grid, so passing at every phase with a coarse dt
+  // means each required input has a timing window at least dt wide.
+  function solve({ level = 0, chunk = null, k = 1, hb = 0, cap = 500, dt = 1 / 30, phase = 0, maxTicks = 30 * 150 } = {}) {
+    const saved = { mode: S.mode, paused: S.paused, level: S.level };
     S.sim = true; S.mode = "play"; S.paused = true; S.level = level;
     restartLevel();
     let endX = Infinity;
-    if (pattern !== null) {
+    if (chunk !== null) {
       S.fixedSpeed = 330 * k; S.noSpawn = true;
-      const x0 = 12 * B, built = PATTERNS[pattern].b(k);
-      S.objs = built.o.map(s => materialize(s, x0, k)).sort((a, b) => a.x - b.x);
-      S.nextX = null;
-      endX = x0 + (built.len + 12) * B;
+      const ch = typeof chunk === "number" ? CHUNKS[chunk] : CHUNKS.find(c => c.name === chunk);
+      const c = buildChunk(ch, k), x0 = 12 * B;
+      S.objs = [
+        place({ t: "f", x: 0, w: 44, top: 0 }, x0 - 44 * B, k, hb),
+        ...[...c.floors, ...c.o].map(o => Object.assign(place(o, x0, k, hb), { chunk: ch.name })),
+        place({ t: "f", x: 0, w: 16, top: c.f }, x0 + c.x * B, k, hb),
+      ].sort((a, b) => a.x - b.x);
+      S.hb = hb; S.surf = hb * B; S.nextX = null;
+      endX = x0 + (c.x + 12) * B;
     }
-    let states = [{ h: 0, vy: 0, g: true, duck: false, flip: false, buf: 0, held: false, used: "," }];
-    let x = 0, result = null, peak = 0;
+    const seen = new Set(), spawned = [];
+    let states = [{ h: S.hb * B, vy: 0, g: true, duck: false, flip: false, buf: 0, held: false, used: "," }];
+    let x = -phase * dt * speed(), result = null, peak = 0;
     for (let tick = 0; tick < maxTicks && !result; tick++) {
       S.levelTime += dt;
       S.player.x = x;
       if (!S.noSpawn) spawn();
+      for (const o of S.objs) if (!seen.has(o.id)) { seen.add(o.id); spawned.push(o); }
       updateDynamics(dt);
       const usable = S.objs.filter(o => o.t === "p" || o.t === "o" || o.t === "gp");
       const next = new Map();
-      let nx = x;
+      let nx = null;
       for (const st of states) for (const held of [false, true]) for (const duck of [false, true]) {
         const p = S.player;
         p.x = x; p.h = st.h; p.vy = st.vy; p.grounded = st.g;
         S.ducking = st.duck; S.flipped = st.flip; S.buffer = st.buf; S.held = held; S.duckInput = duck; S.dead = false;
+        if (st.flip) S.ceilH = st.ceil;
         if (held && !st.held) S.buffer = 0.15;
         for (const o of usable) o.used = st.used.includes("," + o.id + ",");
         physicsSteps(dt);
@@ -2077,31 +2598,60 @@
         nx = p.x;
         const used = "," + usable.filter(o => o.used).map(o => o.id).join(",") + ",";
         const key = `${Math.round(p.h)}|${Math.round(p.vy / 10)}|${+p.grounded}|${+S.ducking}|${+S.flipped}|${+(S.buffer > 0)}|${+held}|${used}`;
-        if (!next.has(key)) next.set(key, { h: p.h, vy: p.vy, g: p.grounded, duck: S.ducking, flip: S.flipped, buf: S.buffer, held, used });
+        if (!next.has(key)) next.set(key, { h: p.h, vy: p.vy, g: p.grounded, duck: S.ducking, flip: S.flipped, ceil: S.ceilH, buf: S.buffer, held, used });
       }
-      x = nx;
       states = [...next.values()];
       peak = Math.max(peak, states.length);
       if (!states.length) {
-        result = { ok: false, atBlock: +(x / B).toFixed(1), time: +S.levelTime.toFixed(2), near: S.objs.filter(o => Math.abs(o.x - x) < 8 * B).map(o => `#${o.pat} ${o.t}${o.kind ? ":" + o.kind : ""}${o.ceil ? ":ceil" : ""}@${((o.x - x) / B).toFixed(1)}`), k: +(speed() / 330).toFixed(2) };
+        result = {
+          ok: false, atBlock: +(x / B).toFixed(1), time: +S.levelTime.toFixed(2), k: +(speed() / 330).toFixed(2),
+          near: S.objs.filter(o => o.x - x < 8 * B && o.x + o.w - x > -3 * B && o.t !== "roof")
+            .map(o => `${o.chunk || "-"}:${o.t}${o.kind ? ":" + o.kind : ""}@${((o.x - x) / B).toFixed(1)}${o.t === "f" ? "/" + (o.w / B).toFixed(1) + "^" + o.top / B : ""}`),
+        };
         break;
       }
+      x = nx;
       if (states.length > cap) { for (let i = states.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [states[i], states[j]] = [states[j], states[i]]; } states.length = cap; }
       if (S.portalX !== null && x >= S.portalX) result = { ok: true, portalAt: +S.levelTime.toFixed(2) };
       else if (x >= endX) result = { ok: true };
     }
     result ??= { ok: false, timeout: true, time: S.levelTime };
     result.peakStates = peak;
+    if (chunk === null) result.density = density(spawned, level, S.portalX ?? Infinity);
     S.sim = false; S.fixedSpeed = 0; S.noSpawn = false;
     S.mode = saved.mode; S.paused = saved.paused; S.level = saved.level;
-    S.objs = []; S.portalX = null; S.dead = false; S.flipped = false; S.ducking = false;
+    S.objs = S.mode === "title" ? titleFloor() : []; S.portalX = null; S.dead = false; S.flipped = false; S.ducking = false;
     S.player = { x: 0, h: 0, vy: 0, rot: 0, grounded: true };
+    camH = 0;
     return result;
+  }
+  // Longest stretch (seconds) with nothing to react to: no obstacle, no change
+  // in floor height and no pit edge.
+  function density(objs, level, endX) {
+    const ev = [];
+    const floors = objs.filter(o => o.t === "f").sort((a, b) => a.x - b.x);
+    floors.forEach((f, i) => {
+      const prev = floors[i - 1], next = floors[i + 1];
+      if (!prev || Math.abs(prev.x + prev.w - f.x) > 1 || prev.top !== f.top) ev.push(f.x);
+      if (!next || Math.abs(f.x + f.w - next.x) > 1 || next.top !== f.top) ev.push(f.x + f.w);
+    });
+    for (const o of objs) if (o.t !== "f" && o.t !== "roof") ev.push(o.x);
+    ev.sort((a, b) => a - b);
+    const where = x => objs.find(o => o.x <= x + 1 && o.x + o.w >= x - 1 && o.chunk)?.chunk || "breather";
+    const sp = 330 + level * 26 + 25, start = 16 * B;
+    let worst = 0, at = 0;
+    for (let i = 1; i < ev.length && ev[i] <= endX; i++) {
+      if (ev[i - 1] < start) continue;
+      const gap = (ev[i] - ev[i - 1]) / sp;
+      if (gap > worst) { worst = gap; at = ev[i - 1]; }
+    }
+    return { maxGapSec: +worst.toFixed(2), atBlock: +(at / B).toFixed(0), after: where(at) };
   }
 
   function boot(data) {
     window.addEventListener("resize", resize);
     resize();
+    S.objs = titleFloor();
     setEnv(0);
     S.envT = 1;
     if (data && data.mode === "play" && Number.isInteger(data.level)) {
@@ -2113,7 +2663,7 @@
     }
     requestAnimationFrame(frame);
   }
-  window.__beatline = { S, PATTERNS, STYLES, solve, materialize, setEnv, startGame, spawn, speed, emit, LEVEL_SECONDS, B, CEIL_H };
+  window.__beatline = { S, CHUNKS, STYLES, solve, buildChunk, place, setEnv, startGame, spawn, speed, emit, updateCamera, updateDynamics, LEVEL_SECONDS, B, CEIL_H };
   try { window.claude?.hot?.snapshot?.(() => ({ mode: S.mode, level: S.level, attempts: S.attempts })); } catch { /* no hot reload */ }
   const hot = window.claude?.hot;
   if (hot?.ready) hot.ready(boot); else boot(hot?.data ?? {});
