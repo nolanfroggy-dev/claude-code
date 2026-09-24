@@ -1,0 +1,1003 @@
+<title>Beatline Dash</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Chakra+Petch:wght@500;600;700&display=swap">
+<style>
+  /* Single-look arcade screen: deliberately dark in both viewer themes. */
+  :root {
+    color-scheme: dark;
+    --bg: #07031f;
+    --ink: #f3efff;
+    --dim: #b9b0dc;
+    --panel: rgba(7, 3, 24, 0.78);
+    --line: rgba(243, 239, 255, 0.18);
+    --accent: #3ef2ff;
+    --hot: #ff3d9a;
+    --display: "Bungee", "Impact", "Arial Black", sans-serif;
+    --body: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
+  }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    overflow: hidden;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+  /* HUD */
+  #hud {
+    position: fixed; left: 0; right: 0; top: 0;
+    padding: calc(env(safe-area-inset-top, 0px) + 12px) 16px 0;
+    display: grid;
+    grid-template-columns: 1fr minmax(0, 2fr) 1fr;
+    grid-template-areas: "lvl bar side";
+    gap: 16px;
+    align-items: start;
+    pointer-events: none;
+  }
+  .hud-l { grid-area: lvl; }
+  .hud-c { grid-area: bar; padding-top: 4px; }
+  .hud-r { grid-area: side; display: flex; justify-content: flex-end; align-items: flex-start; gap: 12px; }
+  .lvl { font-family: var(--display); font-size: 22px; line-height: 1; letter-spacing: 0.02em; text-shadow: 2px 2px 0 var(--hot); }
+  .env { font-size: 13px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); margin-top: 6px; }
+  .bar { height: 10px; background: var(--panel); border: 1px solid var(--line); position: relative; overflow: hidden; }
+  #barFill { position: absolute; inset: 0 auto 0 0; width: 0%; background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+  .next { margin-top: 6px; font-size: 12px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); text-align: center; font-variant-numeric: tabular-nums; }
+  .stats { display: grid; gap: 2px; text-align: right; font-size: 11px; font-weight: 600; letter-spacing: 0.14em; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .stats b { color: var(--ink); font-size: 14px; letter-spacing: 0.04em; margin-left: 6px; }
+  .btns { display: flex; gap: 8px; }
+  .icon-btn {
+    pointer-events: auto;
+    width: 38px; height: 38px;
+    display: grid; place-items: center;
+    background: var(--panel); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 0;
+    cursor: pointer; padding: 0;
+  }
+  .icon-btn:hover { border-color: var(--accent); }
+  .icon-btn:focus-visible, .play:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .icon-btn svg { width: 18px; height: 18px; }
+  .icon-btn[aria-pressed="true"] .cross { display: none; }
+  .icon-btn[aria-pressed="false"] .wave { display: none; }
+
+  @media (max-width: 600px) {
+    #hud { grid-template-columns: 1fr auto; grid-template-areas: "lvl side" "bar bar"; gap: 10px 12px; }
+    .lvl { font-size: 18px; }
+  }
+
+  /* Overlays */
+  .overlay {
+    position: fixed; inset: 0;
+    display: grid; place-items: center;
+    padding: calc(env(safe-area-inset-top, 0px) + 24px) 16px calc(env(safe-area-inset-bottom, 0px) + 24px);
+    background: radial-gradient(ellipse at 50% 40%, rgba(7, 3, 31, 0.55), rgba(7, 3, 31, 0.9));
+    overflow-y: auto;
+  }
+  .sheet { width: 100%; max-width: 600px; display: grid; gap: 20px; }
+  .title {
+    font-family: var(--display);
+    font-size: clamp(40px, 11vw, 76px);
+    line-height: 0.92;
+    margin: 0;
+    text-wrap: balance;
+    color: var(--ink);
+    text-shadow: 3px 3px 0 var(--hot), 6px 6px 0 var(--accent);
+  }
+  .lede { margin: 0; font-size: 17px; line-height: 1.5; color: var(--ink); max-width: 52ch; }
+  .zones { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+  .zones li { display: grid; grid-template-columns: 14px 1fr; gap: 4px 10px; align-items: center; padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); }
+  .zones .sw { width: 14px; height: 14px; }
+  .zones .nm { font-weight: 700; font-size: 14px; letter-spacing: 0.04em; }
+  .zones .nw { grid-column: 2; font-size: 12px; color: var(--dim); line-height: 1.35; }
+  .zones .lv { font-variant-numeric: tabular-nums; color: var(--dim); font-weight: 600; margin-right: 6px; }
+  .controls { margin: 0; display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--dim); }
+  kbd { font-family: var(--body); font-weight: 700; font-size: 12px; color: var(--ink); border: 1px solid var(--line); padding: 1px 6px; background: var(--panel); }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+  .play {
+    font-family: var(--display); font-size: 24px; letter-spacing: 0.04em;
+    padding: 12px 34px;
+    background: var(--accent); color: #07031f;
+    border: 0; border-radius: 0; cursor: pointer;
+    box-shadow: 5px 5px 0 var(--hot);
+    transition: transform 0.08s, box-shadow 0.08s;
+  }
+  .play:hover { transform: translate(-1px, -1px); box-shadow: 6px 6px 0 var(--hot); }
+  .play:active { transform: translate(3px, 3px); box-shadow: 2px 2px 0 var(--hot); }
+  .best { font-size: 13px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
+  .best b { color: var(--ink); }
+  .pause-title { font-family: var(--display); font-size: 48px; margin: 0; text-shadow: 3px 3px 0 var(--hot); }
+
+  /* Level-up banner */
+  #banner { position: fixed; inset: 0; display: grid; place-items: center; pointer-events: none; text-align: center; padding-inline: 16px; }
+  #banner .big { font-family: var(--display); font-size: clamp(44px, 12vw, 96px); line-height: 1; text-shadow: 4px 4px 0 var(--hot), 8px 8px 0 rgba(0,0,0,0.35); }
+  #banner .sub { margin-top: 10px; font-size: 18px; font-weight: 700; letter-spacing: 0.3em; text-transform: uppercase; color: var(--accent); }
+  #banner .tip { margin-top: 8px; font-size: 14px; color: var(--ink); letter-spacing: 0.06em; }
+  #banner.show > div { animation: bannerIn 2.6s cubic-bezier(.2,.8,.2,1) forwards; }
+  @keyframes bannerIn {
+    0% { opacity: 0; transform: scale(1.6); }
+    12% { opacity: 1; transform: scale(1); }
+    78% { opacity: 1; transform: scale(1); }
+    100% { opacity: 0; transform: scale(0.96); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    @keyframes bannerIn { 0% { opacity: 0; } 10% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
+    .play { transition: none; }
+  }
+</style>
+
+<canvas id="game" aria-label="Beatline Dash game area"></canvas>
+
+<div id="hud">
+  <div class="hud-l">
+    <div class="lvl">LEVEL <span id="lvlNum">1</span></div>
+    <div class="env" id="envName">Neon Grid</div>
+  </div>
+  <div class="hud-c">
+    <div class="bar" role="progressbar" aria-label="Progress to next zone" aria-valuemin="0" aria-valuemax="100" id="bar"><div id="barFill"></div></div>
+    <div class="next" id="nextLabel">2:00 to Lava Forge</div>
+  </div>
+  <div class="hud-r">
+    <div class="stats">
+      <div>ATTEMPT<b id="att">1</b></div>
+      <div>BEST LV<b id="bestHud">1</b></div>
+    </div>
+    <div class="btns">
+      <button class="icon-btn" id="muteBtn" type="button" aria-pressed="true" aria-label="Sound on (M)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" stroke="none"/><path class="wave" d="M16 9c1.5 1.6 1.5 4.4 0 6M19 6.5c3 3 3 8 0 11"/><path class="cross" d="M16.5 9.5l5 5M21.5 9.5l-5 5"/></svg>
+      </button>
+      <button class="icon-btn" id="pauseBtn" type="button" aria-label="Pause (P)">
+        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="banner" hidden><div><div class="big" id="bannerBig">LEVEL 2</div><div class="sub" id="bannerSub">Lava Forge</div><div class="tip" id="bannerTip"></div></div></div>
+
+<div class="overlay" id="startScreen">
+  <div class="sheet">
+    <h1 class="title">Beatline<br>Dash</h1>
+    <p class="lede">Jump the spikes and ride the blocks. Last two minutes without crashing and a portal warps you to the next zone. Every zone runs faster and brings new obstacles. Crashing restarts the current zone's clock.</p>
+    <ul class="zones" id="zoneList"></ul>
+    <p class="controls">
+      <span><kbd>Space</kbd> <kbd>&uarr;</kbd> or tap: jump</span>
+      <span>Hold to keep jumping</span>
+      <span>Tap inside yellow orbs to jump mid-air</span>
+      <span><kbd>P</kbd> pause</span>
+      <span><kbd>M</kbd> sound</span>
+    </p>
+    <div class="row">
+      <button class="play" id="playBtn" type="button">Play</button>
+      <span class="best" id="bestStart">Best: Level <b>1</b></span>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="pauseScreen" hidden>
+  <div class="sheet" style="justify-items:start">
+    <h2 class="pause-title">Paused</h2>
+    <p class="lede" id="pauseInfo">Level 1, Neon Grid.</p>
+    <div class="row">
+      <button class="play" id="resumeBtn" type="button">Resume</button>
+      <button class="icon-btn" id="quitBtn" type="button" aria-label="Back to title" style="width:auto;padding:0 14px;font-family:var(--body);font-weight:700;letter-spacing:.08em">QUIT</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---- Tuning -------------------------------------------------------------
+  const LEVEL_SECONDS = 120;      // consecutive seconds alive needed to reach the next zone
+  const B = 40;                   // one block, in logical pixels
+  const P = 34;                   // player cube size
+  const VIEW_H = 450;             // logical height the playfield is designed for
+  const GROUND = 330;             // y of the ground line in logical coords
+  const G = 2700;                 // gravity, px/s^2
+  const JUMP_V = 700;             // ~2.25 blocks high
+  const PAD_V = 1050;             // ~5 blocks high
+  const ORB_V = 730;
+
+  // ---- Zones --------------------------------------------------------------
+  const ENVS = [
+    { name: "Neon Grid",    sky0: "#07031f", sky1: "#3a0f6b", ground: "#12062e", line: "#3ef2ff", obs: "#ff3d9a", block: "#1c0b45", edge: "#3ef2ff", player: "#ffe14d", far: "#2a1258", near: "#170836", sil: "city",   fx: "twinkle", cel: "sun",    note: 45, isNew: "Spikes and blocks" },
+    { name: "Lava Forge",   sky0: "#120302", sky1: "#6b1a06", ground: "#220704", line: "#ff7a1a", obs: "#ffd447", block: "#3b0e05", edge: "#ff5b24", player: "#6ff6ff", far: "#4a1206", near: "#2c0a04", sil: "peaks",  fx: "embers",  cel: "moon",   note: 40, isNew: "Platforms, spikes on blocks, tall steps" },
+    { name: "Abyssal Reef", sky0: "#02161f", sky1: "#05566a", ground: "#032830", line: "#43ffd2", obs: "#ff6f61", block: "#06404b", edge: "#43ffd2", player: "#ffb4ee", far: "#04404f", near: "#032c37", sil: "domes",  fx: "bubbles", cel: "rays",   note: 43, isNew: "Jump pads, triple spikes, stairs" },
+    { name: "Toxic Canopy", sky0: "#050f06", sky1: "#274a0c", ground: "#0c2108", line: "#b8ff2b", obs: "#ff2f7a", block: "#15340b", edge: "#b8ff2b", player: "#f4fff0", far: "#1b3a0b", near: "#0f2607", sil: "spires", fx: "spores",  cel: "vines",  note: 38, isNew: "Jump orbs, spiked platforms" },
+    { name: "Glacier Pass", sky0: "#0c1838", sky1: "#6f9fd6", ground: "#d7e6ff", line: "#6fb6ff", obs: "#1f3f9e", block: "#b3cdf2", edge: "#ffffff", player: "#ff4d6d", far: "#9dbbe6", near: "#c6daf6", sil: "peaks",  fx: "snow",    cel: "aurora", note: 47, isNew: "Pad pits over spike rows" },
+    { name: "The Void",     sky0: "#000000", sky1: "#1e0033", ground: "#06000c", line: "#cc66ff", obs: "#ffffff", block: "#13001f", edge: "#cc66ff", player: "#00ffa6", far: "#1a0530", near: "#0e0219", sil: "shards", fx: "stars",   cel: "planet", note: 36, isNew: "Everything, faster" },
+  ];
+  const COLOR_KEYS = ["sky0", "sky1", "ground", "line", "obs", "block", "edge", "player", "far", "near"];
+  const hex2rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const ENV_RGB = ENVS.map(e => Object.fromEntries(COLOR_KEYS.map(k => [k, hex2rgb(e[k])])));
+  const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  const css = (c, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+  const ROMAN = ["", " II", " III", " IV", " V", " VI", " VII", " VIII", " IX", " X"];
+  const envOf = lvl => ENVS[lvl % ENVS.length];
+  const zoneName = lvl => envOf(lvl).name + (ROMAN[Math.floor(lvl / ENVS.length)] ?? " +" + Math.floor(lvl / ENVS.length));
+
+  // ---- Obstacle patterns --------------------------------------------------
+  // [type, blockX, row, widthBlocks, heightBlocks]; s=spike b=block p=pad o=orb.
+  // d = difficulty at which the pattern unlocks (difficulty = level index + progress through it).
+  const PATTERNS = [
+    { d: 0,   len: 1,  o: [["s", 0]] },
+    { d: 0,   len: 1,  o: [["b", 0, 0, 1, 1]] },
+    { d: 0,   len: 3,  o: [["b", 0, 0, 3, 1]] },
+    { d: 0.35, len: 2, o: [["s", 0], ["s", 1]] },
+    { d: 0.7, len: 7,  o: [["s", 0], ["s", 3], ["s", 6]] },
+    { d: 1,   len: 6,  o: [["b", 0, 0, 2, 1], ["s", 2], ["s", 3], ["b", 4, 0, 2, 1]] },
+    { d: 1.2, len: 3,  o: [["b", 0, 0, 3, 1], ["s", 2, 1]] },
+    { d: 1.5, len: 3,  o: [["b", 0, 0, 3, 2]] },
+    { d: 2,   len: 3,  o: [["s", 0], ["s", 1], ["s", 2]] },
+    { d: 2,   len: 9,  o: [["p", 0], ["b", 3, 0, 2, 3]] },
+    { d: 2.5, len: 11, o: [["b", 0, 0, 3, 1], ["b", 4, 0, 3, 2], ["b", 8, 0, 3, 3]] },
+    { d: 3,   len: 7,  o: [["s", 0], ["s", 1], ["s", 2], ["s", 3], ["s", 4], ["o", 2, 2]] },
+    { d: 3.4, len: 8,  o: [["b", 0, 0, 8, 1], ["s", 3, 1], ["s", 7, 1]] },
+    { d: 4,   len: 9,  o: [["p", 0], ["s", 2], ["s", 3], ["s", 4]] },
+    { d: 4.5, len: 9,  o: [["s", 0], ["s", 1], ["s", 2], ["o", 2, 2], ["s", 5], ["s", 6], ["s", 7]] },
+  ];
+
+  // ---- Canvas & sizing ----------------------------------------------------
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  let dpr = 1, scale = 1, viewW = 800, viewH = VIEW_H, offY = 0, playerSX = 200, camX = 0;
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const cw = window.innerWidth, ch = window.innerHeight;
+    canvas.width = Math.round(cw * dpr);
+    canvas.height = Math.round(ch * dpr);
+    scale = Math.min(ch / VIEW_H, cw / 720);
+    viewW = cw / scale;
+    viewH = ch / scale;
+    offY = (viewH - VIEW_H) * 0.55;
+    playerSX = Math.max(110, Math.min(viewW * 0.26, 260));
+    initFx();
+  }
+
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const hash = n => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+  const ease = t => t * t * (3 - 2 * t);
+
+  // ---- Persistent best (per-viewer convenience) ---------------------------
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage unavailable */ } },
+  };
+  let bestLevel = store.get("beatline-best-level", 1);
+  let soundOn = store.get("beatline-sound", true);
+
+  // ---- State --------------------------------------------------------------
+  const S = {
+    mode: "title", paused: false,
+    level: 0, levelTime: 0, attempts: 0,
+    player: { x: 0, h: 0, vy: 0, rot: 0, grounded: true },
+    objs: [], nextX: 0, portalX: null,
+    dead: false, deadT: 0,
+    held: false, buffer: 0,
+    envFrom: 0, envTo: 0, envT: 1, titleT: 0,
+    shake: 0, flash: 0,
+  };
+  const particles = [];
+  let fx = [];
+
+  function speed() { return Math.min(640, 330 + S.level * 26 + (S.levelTime / LEVEL_SECONDS) * 50); }
+  function difficulty() { return S.level + Math.min(1, S.levelTime / LEVEL_SECONDS); }
+  const camLeft = () => S.player.x - playerSX;
+
+  function setEnv(i) {
+    if (i === S.envTo && S.envT >= 1) return;
+    S.envFrom = S.envT < 0.5 ? S.envFrom : S.envTo;
+    S.envTo = i;
+    S.envT = 0;
+    const root = document.documentElement.style;
+    root.setProperty("--accent", ENVS[i].line);
+    root.setProperty("--hot", ENVS[i].obs);
+    initFx();
+  }
+  function palette() {
+    const a = ENV_RGB[S.envFrom], b = ENV_RGB[S.envTo], t = ease(S.envT), o = {};
+    for (const k of COLOR_KEYS) o[k] = mix(a[k], b[k], t);
+    return o;
+  }
+  function envWeights() {
+    const t = ease(S.envT);
+    return S.envFrom === S.envTo || t >= 1 ? [[S.envTo, 1]] : [[S.envFrom, 1 - t], [S.envTo, t]];
+  }
+
+  // ---- Level flow ---------------------------------------------------------
+  function restartLevel() {
+    S.player = { x: 0, h: 0, vy: 0, rot: 0, grounded: true };
+    S.objs = [];
+    S.nextX = 14 * B;
+    S.portalX = null;
+    S.levelTime = 0;
+    S.dead = false;
+    S.deadT = 0;
+    S.attempts++;
+  }
+  function startGame(level = 0) {
+    if (S.mode === "play") return;
+    S.mode = "play";
+    S.paused = false;
+    S.level = level;
+    S.attempts = 0;
+    restartLevel();
+    setEnv(level % ENVS.length);
+    document.getElementById("startScreen").hidden = true;
+    document.getElementById("pauseScreen").hidden = true;
+    audio.init();
+    audio.resync();
+    if (level > 0) showBanner();
+  }
+  function quitToTitle() {
+    S.mode = "title";
+    S.paused = false;
+    S.objs = [];
+    S.portalX = null;
+    S.dead = false;
+    S.player = { x: S.player.x, h: 0, vy: 0, rot: 0, grounded: true };
+    document.getElementById("pauseScreen").hidden = true;
+    document.getElementById("startScreen").hidden = false;
+    updateBestText();
+    document.getElementById("playBtn").focus();
+  }
+  function levelUp() {
+    S.level++;
+    S.levelTime = 0;
+    S.portalX = null;
+    S.nextX = camLeft() + viewW + 3 * B;
+    setEnv(S.level % ENVS.length);
+    S.flash = 0.8;
+    if (S.level + 1 > bestLevel) { bestLevel = S.level + 1; store.set("beatline-best-level", bestLevel); }
+    burst(S.player.x + P / 2, S.player.h + P / 2, 40, ENVS[S.level % ENVS.length].line, 500);
+    audio.levelUp();
+    showBanner();
+  }
+  function die() {
+    if (S.dead) return;
+    S.dead = true;
+    S.deadT = 0;
+    S.shake = reducedMotion ? 0 : 14;
+    S.flash = 0.5;
+    const e = envOf(S.level);
+    burst(S.player.x + P / 2, S.player.h + P / 2, 34, e.player, 460);
+    burst(S.player.x + P / 2, S.player.h + P / 2, 16, "#ffffff", 300);
+    audio.crash();
+  }
+  function togglePause(force) {
+    if (S.mode !== "play") return;
+    S.paused = force ?? !S.paused;
+    document.getElementById("pauseScreen").hidden = !S.paused;
+    if (S.paused) {
+      S.held = false;
+      document.getElementById("pauseInfo").textContent =
+        `Level ${S.level + 1}, ${zoneName(S.level)}. ${fmt(LEVEL_SECONDS - S.levelTime)} left until the portal.`;
+      document.getElementById("resumeBtn").focus();
+    } else {
+      audio.resync();
+      canvas.focus?.();
+    }
+  }
+
+  let bannerTimer = 0;
+  function showBanner() {
+    const el = document.getElementById("banner");
+    document.getElementById("bannerBig").textContent = `LEVEL ${S.level + 1}`;
+    document.getElementById("bannerSub").textContent = zoneName(S.level);
+    const tip = S.level < ENVS.length ? `New: ${envOf(S.level).isNew}` : "Faster than last time";
+    document.getElementById("bannerTip").textContent = tip;
+    el.hidden = false;
+    el.classList.remove("show");
+    void el.offsetWidth;
+    el.classList.add("show");
+    clearTimeout(bannerTimer);
+    bannerTimer = setTimeout(() => { el.hidden = true; el.classList.remove("show"); }, 2700);
+  }
+
+  // ---- Spawning -----------------------------------------------------------
+  function pickPattern(d) {
+    const pool = PATTERNS.filter(p => p.d <= d);
+    let total = 0;
+    const w = pool.map(p => { const x = p.d > d - 1.2 ? 2.2 : 1; total += x; return x; });
+    let r = Math.random() * total;
+    for (let i = 0; i < pool.length; i++) { r -= w[i]; if (r <= 0) return pool[i]; }
+    return pool[pool.length - 1];
+  }
+  function spawn() {
+    const right = camLeft() + viewW + 2 * B;
+    while (S.nextX !== null && S.nextX < right) {
+      const sp = speed();
+      const eta = (S.nextX - S.player.x) / sp;
+      if (S.levelTime + eta >= LEVEL_SECONDS - 0.25) {
+        S.portalX = S.nextX + B;
+        S.nextX = null;
+        break;
+      }
+      const d = Math.min(difficulty() + eta / LEVEL_SECONDS, S.level + 1);
+      const pat = pickPattern(d);
+      const chunk = pat.o.map(([t, bx, row = 0, w = 1, hh = 1]) => ({ t, x: S.nextX + bx * B, row, w: w * B, hh, used: false }));
+      chunk.sort((a, b) => a.x - b.x);
+      S.objs.push(...chunk);
+      const maxGap = Math.max(4, 8.5 - d * 0.9);
+      const minGap = Math.max(3.2, maxGap - 3);
+      S.nextX += (pat.len + rand(minGap, maxGap) * (sp / 330)) * B;
+    }
+    const cut = camLeft() - 2 * B;
+    if (S.objs.length && S.objs[0].x + S.objs[0].w < cut) S.objs = S.objs.filter(o => o.x + o.w >= cut);
+  }
+
+  // ---- Physics ------------------------------------------------------------
+  function step(dt) {
+    const p = S.player;
+    const prevH = p.h;
+    p.x += speed() * dt;
+    p.vy -= G * dt;
+    p.h += p.vy * dt;
+    let grounded = false;
+    if (p.h <= 0) { p.h = 0; p.vy = 0; grounded = true; }
+
+    for (const o of S.objs) {
+      if (o.x > p.x + P) break;
+      if (o.x + o.w < p.x) continue;
+      if (o.t === "b") {
+        const bot = o.row * B, top = bot + o.hh * B;
+        if (p.h < top && p.h + P > bot) {
+          if (prevH >= top - 10 && p.vy <= 0) { p.h = top; p.vy = 0; grounded = true; }
+          else { die(); return; }
+        }
+      } else if (o.t === "s") {
+        const base = o.row * B, cx = o.x + B / 2;
+        if (p.x + P - 4 > cx - 8 && p.x + 4 < cx + 8 && p.h + 4 < base + 26 && p.h + P - 4 > base) { die(); return; }
+      } else if (o.t === "p") {
+        if (!o.used && p.x + P > o.x + 6 && p.x < o.x + B - 6 && p.h <= o.row * B + 12) {
+          p.vy = PAD_V; o.used = true; grounded = false;
+          burst(o.x + B / 2, o.row * B + 4, 14, "#ffe066", 260);
+          audio.boing();
+        }
+      } else if (o.t === "o") {
+        const dx = p.x + P / 2 - (o.x + B / 2), dy = p.h + P / 2 - (o.row * B + B / 2);
+        if (!o.used && S.buffer > 0 && dx * dx + dy * dy < 40 * 40) {
+          p.vy = ORB_V; o.used = true; S.buffer = 0; grounded = false;
+          burst(o.x + B / 2, o.row * B + B / 2, 16, "#ffe066", 240);
+        }
+      }
+    }
+    p.grounded = grounded;
+    if (grounded && (S.held || S.buffer > 0)) { p.vy = JUMP_V; p.grounded = false; S.buffer = 0; }
+  }
+
+  // ---- Particles & ambient fx --------------------------------------------
+  function burst(x, h, n, color, power) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, s = rand(0.3, 1) * power;
+      particles.push({ x, h, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: rand(0.5, 1), max: 1, size: rand(3, 8), color, g: true });
+    }
+  }
+  function updateParticles(dt) {
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const q = particles[i];
+      q.life -= dt;
+      if (q.life <= 0) { particles.splice(i, 1); continue; }
+      if (q.g) q.vy -= 1400 * dt;
+      q.x += q.vx * dt; q.h += q.vy * dt;
+      if (q.h < 0 && q.g) { q.h = 0; q.vy *= -0.35; q.vx *= 0.7; }
+    }
+  }
+  function initFx() {
+    fx = [];
+    const kind = ENVS[S.envTo].fx;
+    const n = kind === "stars" ? 70 : kind === "twinkle" ? 60 : 45;
+    for (let i = 0; i < n; i++) fx.push({ x: Math.random() * viewW, y: rand(-offY, GROUND), s: Math.random(), ph: Math.random() * 6.28 });
+  }
+  function updateFx(dt, sp) {
+    const kind = ENVS[S.envTo].fx, top = -offY - 10;
+    for (const f of fx) {
+      switch (kind) {
+        case "twinkle": f.x -= sp * 0.02 * dt; break;
+        case "embers":  f.y -= (25 + f.s * 50) * dt; f.x -= (sp * 0.12 + 20) * dt; break;
+        case "bubbles": f.y -= (18 + f.s * 30) * dt; f.x -= sp * 0.08 * dt; f.ph += dt * 2; break;
+        case "spores":  f.x -= (sp * 0.1 + 20 + f.s * 30) * dt; f.ph += dt * 1.5; break;
+        case "snow":    f.y += (30 + f.s * 50) * dt; f.x -= (sp * 0.15 + 30 * f.s) * dt; f.ph += dt; break;
+        case "stars":   f.x -= sp * (0.8 + f.s * 1.6) * dt; break;
+      }
+      if (f.x < -40) { f.x = viewW + rand(0, 40); f.y = rand(top, GROUND); }
+      if (f.y < top) { f.y = GROUND; f.x = Math.random() * viewW; }
+      if (f.y > GROUND) { f.y = top; f.x = Math.random() * viewW; }
+    }
+  }
+  function drawFx(c, t) {
+    const kind = ENVS[S.envTo].fx, a = ease(S.envT);
+    ctx.save();
+    ctx.globalAlpha = a;
+    for (const f of fx) {
+      switch (kind) {
+        case "twinkle":
+          ctx.fillStyle = css([255, 255, 255], 0.3 + 0.5 * Math.abs(Math.sin(t * 2 + f.ph)));
+          ctx.fillRect(f.x, f.y * 0.6 - offY * 0.4, 2, 2);
+          break;
+        case "embers":
+          ctx.fillStyle = css(c.line, 0.4 + 0.5 * f.s);
+          ctx.fillRect(f.x, f.y, 2 + f.s * 2, 2 + f.s * 2);
+          break;
+        case "bubbles":
+          ctx.strokeStyle = css(c.line, 0.35);
+          ctx.lineWidth = 1.2;
+          ctx.beginPath(); ctx.arc(f.x + Math.sin(f.ph) * 6, f.y, 2 + f.s * 5, 0, 6.283); ctx.stroke();
+          break;
+        case "spores":
+          ctx.fillStyle = css(c.line, 0.25 + 0.4 * f.s);
+          ctx.beginPath(); ctx.arc(f.x, f.y + Math.sin(f.ph) * 10, 1.5 + f.s * 2.5, 0, 6.283); ctx.fill();
+          break;
+        case "snow":
+          ctx.fillStyle = "rgba(255,255,255,0.85)";
+          ctx.beginPath(); ctx.arc(f.x + Math.sin(f.ph) * 8, f.y, 1 + f.s * 2.2, 0, 6.283); ctx.fill();
+          break;
+        case "stars":
+          ctx.strokeStyle = css([255, 255, 255], 0.2 + 0.5 * f.s);
+          ctx.lineWidth = 1 + f.s;
+          ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.lineTo(f.x + 10 + f.s * 40, f.y); ctx.stroke();
+          break;
+      }
+    }
+    ctx.restore();
+  }
+
+  // ---- Background ---------------------------------------------------------
+  const CELESTIAL = {
+    sun(t, c) {
+      const cx = viewW * 0.7, cy = GROUND - 60, r = 120;
+      const g = ctx.createLinearGradient(0, cy - r, 0, cy);
+      g.addColorStop(0, "#ffe14d"); g.addColorStop(1, "#ff3d9a");
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.283); ctx.fill();
+      ctx.fillStyle = css(c.sky1);
+      for (let i = 0; i < 6; i++) { const y = cy - 58 + i * 16; ctx.fillRect(cx - r, y, r * 2, 2 + i * 1.6); }
+    },
+    moon(t, c) {
+      const cx = viewW * 0.76, cy = GROUND - 210;
+      const g = ctx.createRadialGradient(cx, cy, 10, cx, cy, 150);
+      g.addColorStop(0, "rgba(255,150,60,0.55)"); g.addColorStop(1, "rgba(255,90,30,0)");
+      ctx.fillStyle = g; ctx.fillRect(cx - 150, cy - 150, 300, 300);
+      ctx.fillStyle = "rgba(255,170,90,0.75)";
+      ctx.beginPath(); ctx.arc(cx, cy, 46, 0, 6.283); ctx.fill();
+    },
+    rays(t, c) {
+      ctx.fillStyle = "rgba(200,255,245,0.06)";
+      for (let i = 0; i < 5; i++) {
+        const x = viewW * (0.1 + i * 0.22) + Math.sin(t * 0.4 + i) * 30;
+        ctx.beginPath(); ctx.moveTo(x - 20, -offY); ctx.lineTo(x + 40, -offY); ctx.lineTo(x + 160, GROUND); ctx.lineTo(x + 60, GROUND); ctx.fill();
+      }
+    },
+    vines(t, c) {
+      ctx.strokeStyle = css(c.near); ctx.lineWidth = 3;
+      const seg = 55, off = camX * 0.5, i0 = Math.floor(off / seg) - 1;
+      for (let i = i0; i < i0 + viewW / seg + 3; i++) {
+        const x = i * seg - off, len = 40 + hash(i + 99) * 150, sway = Math.sin(t + i) * 6;
+        ctx.beginPath(); ctx.moveTo(x, -offY); ctx.quadraticCurveTo(x + sway, -offY + len * 0.6, x + sway * 1.5, -offY + len); ctx.stroke();
+        ctx.fillStyle = css(c.far);
+        ctx.beginPath(); ctx.ellipse(x + sway * 1.5, -offY + len, 7, 4, 0.5, 0, 6.283); ctx.fill();
+      }
+    },
+    aurora(t, c) {
+      for (let k = 0; k < 2; k++) {
+        const g = ctx.createLinearGradient(0, 0, viewW, 0);
+        g.addColorStop(0, "rgba(120,255,200,0)"); g.addColorStop(0.5, `rgba(${k ? "140,200,255" : "120,255,200"},0.35)`); g.addColorStop(1, "rgba(120,255,200,0)");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        const base = -offY * 0.3 + 40 + k * 50;
+        ctx.moveTo(0, base);
+        for (let x = 0; x <= viewW; x += 30) ctx.lineTo(x, base + Math.sin(x * 0.01 + t * 0.6 + k * 2) * 25);
+        for (let x = viewW; x >= 0; x -= 30) ctx.lineTo(x, base + 40 + Math.sin(x * 0.012 + t * 0.5 + k) * 20);
+        ctx.fill();
+      }
+    },
+    planet(t, c) {
+      const cx = viewW * 0.78, cy = GROUND - 220;
+      ctx.fillStyle = "#2a0a45";
+      ctx.beginPath(); ctx.arc(cx, cy, 44, 0, 6.283); ctx.fill();
+      ctx.strokeStyle = css(c.line, 0.8); ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.ellipse(cx, cy, 80, 16, -0.3, 0, 6.283); ctx.stroke();
+    },
+  };
+
+  function drawLayer(style, factor, maxH, color, seed, t) {
+    const seg = style === "spires" ? 46 : 70;
+    const off = camX * factor;
+    const i0 = Math.floor(off / seg) - 2, i1 = i0 + Math.ceil(viewW / seg) + 4;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    for (let i = i0; i < i1; i++) {
+      const x = i * seg - off, r = hash(i + seed), h = maxH * (0.35 + 0.65 * r);
+      switch (style) {
+        case "city":
+          ctx.rect(x + 4, GROUND - h, seg - 8, h);
+          if (r > 0.7) ctx.rect(x + seg / 2 - 1, GROUND - h - 18, 2, 18);
+          break;
+        case "peaks":
+          ctx.moveTo(x - seg * 0.7, GROUND); ctx.lineTo(x + seg / 2, GROUND - h); ctx.lineTo(x + seg * 1.7, GROUND); ctx.closePath();
+          break;
+        case "domes":
+          ctx.moveTo(x - 6, GROUND); ctx.ellipse(x + seg / 2, GROUND, seg * 0.6, h * 0.8, 0, Math.PI, 2 * Math.PI);
+          break;
+        case "spires":
+          ctx.moveTo(x + seg / 2 - 12, GROUND); ctx.lineTo(x + seg / 2, GROUND - h * 1.3); ctx.lineTo(x + seg / 2 + 12, GROUND); ctx.closePath();
+          break;
+        case "shards": {
+          const cx = x + seg / 2, cy = GROUND - h - 40 + Math.sin(t * 0.8 + i) * 10, s = 8 + r * 18;
+          ctx.moveTo(cx, cy - s); ctx.lineTo(cx + s * 0.6, cy); ctx.lineTo(cx, cy + s); ctx.lineTo(cx - s * 0.6, cy); ctx.closePath();
+          break;
+        }
+      }
+    }
+    ctx.fill();
+  }
+
+  // ---- Render -------------------------------------------------------------
+  function render(t) {
+    const c = palette();
+    camX = camLeft();
+    ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
+    let sx = 0, sy = 0;
+    if (S.shake > 0) { sx = (Math.random() - 0.5) * S.shake; sy = (Math.random() - 0.5) * S.shake; }
+    ctx.translate(sx, offY + sy);
+    const top = -offY - 20, bottom = viewH - offY + 20;
+
+    const sky = ctx.createLinearGradient(0, top, 0, GROUND);
+    sky.addColorStop(0, css(c.sky0)); sky.addColorStop(1, css(c.sky1));
+    ctx.fillStyle = sky;
+    ctx.fillRect(-20, top, viewW + 40, GROUND - top + 1);
+
+    const weights = envWeights();
+    for (const [i, a] of weights) { ctx.globalAlpha = a; CELESTIAL[ENVS[i].cel](t, c); }
+    ctx.globalAlpha = 1;
+    drawFx(c, t);
+    for (const [i, a] of weights) {
+      ctx.globalAlpha = a;
+      drawLayer(ENVS[i].sil, 0.15, 170, css(c.far), 11, t);
+      drawLayer(ENVS[i].sil, 0.4, 100, css(c.near), 57, t);
+    }
+    ctx.globalAlpha = 1;
+
+    // Ground
+    ctx.fillStyle = css(c.ground);
+    ctx.fillRect(-20, GROUND, viewW + 40, bottom - GROUND);
+    ctx.strokeStyle = css(c.line, 0.16);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    const tile = B * 2, start = -((camX % tile) + tile) % tile;
+    for (let x = start - tile * 4; x < viewW + tile * 4; x += tile) {
+      ctx.moveTo(x, GROUND); ctx.lineTo(x + (x - viewW / 2) * 1.2, GROUND + 260);
+    }
+    for (const d of [14, 34, 62, 100, 150, 220]) { ctx.moveTo(-20, GROUND + d); ctx.lineTo(viewW + 20, GROUND + d); }
+    ctx.stroke();
+    ctx.shadowColor = css(c.line); ctx.shadowBlur = 14;
+    ctx.fillStyle = css(c.line);
+    ctx.fillRect(-20, GROUND - 1, viewW + 40, 3);
+    ctx.shadowBlur = 0;
+
+    drawObjects(c, t);
+    drawPortal(t);
+
+    for (const q of particles) {
+      ctx.globalAlpha = Math.max(0, q.life / q.max);
+      ctx.fillStyle = q.color;
+      ctx.fillRect(q.x - camX - q.size / 2, GROUND - q.h - q.size / 2, q.size, q.size);
+    }
+    ctx.globalAlpha = 1;
+
+    if (!S.dead) drawPlayer(c);
+
+    if (S.flash > 0) {
+      ctx.fillStyle = `rgba(255,255,255,${Math.min(0.5, S.flash * 0.5)})`;
+      ctx.fillRect(-20, top, viewW + 40, bottom - top);
+    }
+  }
+
+  function drawObjects(c, t) {
+    const right = viewW + B;
+    for (const o of S.objs) {
+      const x = o.x - camX;
+      if (x > right) break;
+      if (x + o.w < -B) continue;
+      const base = GROUND - o.row * B;
+      if (o.t === "b") {
+        const h = o.hh * B, y = base - h;
+        ctx.fillStyle = css(c.block);
+        ctx.fillRect(x, y, o.w, h);
+        ctx.strokeStyle = css(c.edge, 0.3); ctx.lineWidth = 1;
+        for (let cx = 0; cx < o.w; cx += B) for (let cy = 0; cy < h; cy += B) ctx.strokeRect(x + cx + 9, y + cy + 9, B - 18, B - 18);
+        ctx.strokeStyle = css(c.edge); ctx.lineWidth = 2;
+        ctx.strokeRect(x + 1, y + 1, o.w - 2, h - 2);
+      } else if (o.t === "s") {
+        ctx.fillStyle = css(c.obs);
+        ctx.shadowColor = css(c.obs); ctx.shadowBlur = 8;
+        ctx.beginPath(); ctx.moveTo(x + 3, base); ctx.lineTo(x + B / 2, base - B + 4); ctx.lineTo(x + B - 3, base); ctx.closePath(); ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = "rgba(255,255,255,0.55)"; ctx.lineWidth = 1.5; ctx.stroke();
+      } else if (o.t === "p") {
+        ctx.fillStyle = o.used ? "rgba(255,224,102,0.45)" : "#ffe066";
+        ctx.shadowColor = "#ffe066"; ctx.shadowBlur = o.used ? 0 : 14;
+        ctx.beginPath(); ctx.moveTo(x + 3, base); ctx.ellipse(x + B / 2, base, B * 0.44, 10, 0, Math.PI, 2 * Math.PI); ctx.fill();
+        ctx.shadowBlur = 0;
+        if (!o.used) {
+          ctx.strokeStyle = "rgba(255,224,102,0.6)"; ctx.lineWidth = 2;
+          const k = (t * 2) % 1;
+          ctx.beginPath(); ctx.moveTo(x + 12, base - 16 - k * 20); ctx.lineTo(x + B / 2, base - 24 - k * 20); ctx.lineTo(x + B - 12, base - 16 - k * 20); ctx.stroke();
+        }
+      } else if (o.t === "o") {
+        const cx = x + B / 2, cy = base - B / 2, pulse = Math.sin(t * 6) * 3;
+        ctx.globalAlpha = o.used ? 0.3 : 1;
+        ctx.fillStyle = "#ffe066";
+        ctx.shadowColor = "#ffe066"; ctx.shadowBlur = 16;
+        ctx.beginPath(); ctx.arc(cx, cy, 11, 0, 6.283); ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = "#ffe066"; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(cx, cy, 18 + pulse, 0, 6.283); ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  function drawPortal(t) {
+    if (S.portalX === null || S.mode !== "play") return;
+    const x = S.portalX - camX;
+    if (x > viewW + 60) return;
+    const next = ENVS[(S.level + 1) % ENVS.length];
+    const cy = GROUND - 100;
+    ctx.save();
+    ctx.fillStyle = next.sky1;
+    ctx.globalAlpha = 0.55;
+    ctx.beginPath(); ctx.ellipse(x, cy, 24, 100, 0, 0, 6.283); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.shadowColor = next.line; ctx.shadowBlur = 24;
+    ctx.strokeStyle = next.line; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.ellipse(x, cy, 24 + Math.sin(t * 5) * 2, 100, 0, 0, 6.283); ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(x, cy, 14, 86, 0, 0, 6.283); ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawPlayer(c) {
+    const p = S.player;
+    ctx.save();
+    ctx.translate(p.x - camX + P / 2, GROUND - p.h - P / 2);
+    ctx.rotate(p.rot);
+    ctx.shadowColor = css(c.player); ctx.shadowBlur = 16;
+    ctx.fillStyle = css(c.player);
+    ctx.fillRect(-P / 2, -P / 2, P, P);
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = "rgba(0,0,0,0.6)"; ctx.lineWidth = 2.5;
+    ctx.strokeRect(-P / 2 + 1.25, -P / 2 + 1.25, P - 2.5, P - 2.5);
+    ctx.fillStyle = css(mix(c.player, [0, 0, 0], 0.45));
+    ctx.fillRect(-8, -8, 16, 16);
+    ctx.fillStyle = css(c.player);
+    ctx.fillRect(-3, -3, 6, 6);
+    ctx.restore();
+  }
+
+  // ---- HUD ----------------------------------------------------------------
+  const el = id => document.getElementById(id);
+  const hudEls = { lvl: el("lvlNum"), env: el("envName"), fill: el("barFill"), bar: el("bar"), next: el("nextLabel"), att: el("att"), best: el("bestHud") };
+  const fmt = s => { s = Math.max(0, Math.ceil(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+  const hudCache = {};
+  function setText(key, node, v) { if (hudCache[key] !== v) { hudCache[key] = v; node.textContent = v; } }
+  function updateHud() {
+    const playing = S.mode === "play";
+    const lvl = playing ? S.level : S.envTo;
+    setText("lvl", hudEls.lvl, String(lvl + 1));
+    setText("env", hudEls.env, playing ? zoneName(lvl) : ENVS[lvl].name);
+    const pct = playing ? Math.min(100, (S.levelTime / LEVEL_SECONDS) * 100) : 0;
+    const pctStr = pct.toFixed(1) + "%";
+    if (hudCache.pct !== pctStr) { hudCache.pct = pctStr; hudEls.fill.style.width = pctStr; hudEls.bar.setAttribute("aria-valuenow", Math.round(pct)); }
+    const label = !playing ? "Zone preview"
+      : S.portalX !== null && S.levelTime >= LEVEL_SECONDS - 0.5 ? `Portal ahead: ${zoneName(S.level + 1)}`
+      : `${fmt(LEVEL_SECONDS - S.levelTime)} to ${zoneName(S.level + 1)}`;
+    setText("next", hudEls.next, label);
+    setText("att", hudEls.att, String(Math.max(1, S.attempts)));
+    setText("best", hudEls.best, String(bestLevel));
+  }
+  function updateBestText() { el("bestStart").innerHTML = `Best: Level <b>${bestLevel}</b>`; }
+
+  // ---- Audio: a small procedural soundtrack per zone ----------------------
+  const audio = (() => {
+    let ac = null, master = null, noise = null, nextT = 0, stepN = 0;
+    const midi = m => 440 * Math.pow(2, (m - 69) / 12);
+    const BASS = [0, 0, 12, 0, 10, 0, 7, 3];
+    const ARP = [12, 15, 19, 15, 24, 19, 15, 19];
+    function init() {
+      if (ac) { ac.resume?.(); return; }
+      try {
+        ac = new (window.AudioContext || window.webkitAudioContext)();
+        master = ac.createGain();
+        master.gain.value = soundOn ? 0.32 : 0;
+        master.connect(ac.destination);
+        noise = ac.createBuffer(1, ac.sampleRate * 0.5, ac.sampleRate);
+        const d = noise.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      } catch { ac = null; }
+    }
+    function env(node, t, a, peak, dur) {
+      node.gain.setValueAtTime(0.0001, t);
+      node.gain.exponentialRampToValueAtTime(peak, t + a);
+      node.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    }
+    function tone(type, f, t, dur, peak, f2) {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = type; o.frequency.setValueAtTime(f, t);
+      if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+      env(g, t, 0.005, peak, dur);
+      o.connect(g).connect(master); o.start(t); o.stop(t + dur + 0.02);
+    }
+    function hiss(t, dur, peak, hp, lp) {
+      const s = ac.createBufferSource(), g = ac.createGain(), f = ac.createBiquadFilter();
+      s.buffer = noise;
+      f.type = hp ? "highpass" : "lowpass"; f.frequency.value = hp || lp;
+      env(g, t, 0.002, peak, dur);
+      s.connect(f).connect(g).connect(master); s.start(t); s.stop(t + dur + 0.02);
+    }
+    function playStep(n, t) {
+      const root = envOf(S.level).note;
+      if (n % 4 === 0) tone("sine", 150, t, 0.16, 0.9, 40);
+      if (n % 4 === 2) hiss(t, 0.05, 0.25, 7000);
+      if (n % 2 === 0) {
+        const o = ac.createOscillator(), g = ac.createGain(), f = ac.createBiquadFilter();
+        o.type = "sawtooth"; o.frequency.value = midi(root + BASS[(n / 2) % 8]);
+        f.type = "lowpass"; f.frequency.value = 500 + S.level * 60;
+        env(g, t, 0.01, 0.28, 0.18);
+        o.connect(f).connect(g).connect(master); o.start(t); o.stop(t + 0.2);
+      } else if (S.level > 0 || n % 4 === 1) {
+        tone("triangle", midi(root + 12 + ARP[(n >> 1) % 8]), t, 0.12, 0.08);
+      }
+    }
+    setInterval(() => {
+      if (!ac || !soundOn || S.mode !== "play" || S.paused || S.dead) return;
+      const bpm = Math.min(176, 120 + S.level * 7);
+      const spb = 60 / bpm / 4;
+      if (nextT < ac.currentTime) nextT = ac.currentTime + 0.05;
+      while (nextT < ac.currentTime + 0.12) { playStep(stepN, nextT); nextT += spb; stepN = (stepN + 1) % 16; }
+    }, 25);
+    return {
+      init,
+      resync() { if (ac) nextT = ac.currentTime + 0.05; },
+      setOn(on) { if (master) master.gain.value = on ? 0.32 : 0; },
+      crash() { if (!ac || !soundOn) return; const t = ac.currentTime; hiss(t, 0.45, 0.8, 0, 1200); tone("square", 220, t, 0.35, 0.2, 40); },
+      boing() { if (!ac || !soundOn) return; tone("square", 300, ac.currentTime, 0.2, 0.12, 900); },
+      levelUp() {
+        if (!ac || !soundOn) return;
+        const t = ac.currentTime, r = envOf(S.level).note + 24;
+        [0, 4, 7, 12, 16].forEach((s, i) => tone("square", midi(r + s), t + i * 0.07, 0.18, 0.12));
+      },
+    };
+  })();
+
+  // ---- Input --------------------------------------------------------------
+  function press() {
+    audio.init();
+    if (S.mode !== "play" || S.paused) return;
+    S.held = true;
+    S.buffer = 0.15;
+  }
+  function release() { S.held = false; }
+  const JUMP_KEYS = new Set(["Space", "ArrowUp", "KeyW"]);
+  window.addEventListener("keydown", e => {
+    if (JUMP_KEYS.has(e.code)) {
+      e.preventDefault();
+      if (e.repeat) return;
+      if (S.mode === "title") { startGame(); return; }
+      if (S.paused) { togglePause(false); return; }
+      press();
+    } else if (e.code === "KeyP" || e.code === "Escape") {
+      togglePause();
+    } else if (e.code === "KeyM") {
+      toggleSound();
+    }
+  });
+  window.addEventListener("keyup", e => { if (JUMP_KEYS.has(e.code)) release(); });
+  canvas.addEventListener("pointerdown", e => { e.preventDefault(); press(); });
+  window.addEventListener("pointerup", release);
+  window.addEventListener("pointercancel", release);
+  window.addEventListener("blur", () => { release(); togglePause(true); });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) { release(); togglePause(true); } });
+
+  function toggleSound() {
+    soundOn = !soundOn;
+    store.set("beatline-sound", soundOn);
+    audio.init();
+    audio.setOn(soundOn);
+    audio.resync();
+    const b = el("muteBtn");
+    b.setAttribute("aria-pressed", String(soundOn));
+    b.setAttribute("aria-label", soundOn ? "Sound on (M)" : "Sound off (M)");
+  }
+  el("muteBtn").addEventListener("click", toggleSound);
+  el("muteBtn").setAttribute("aria-pressed", String(soundOn));
+  el("pauseBtn").addEventListener("click", () => togglePause());
+  el("playBtn").addEventListener("click", () => startGame());
+  el("resumeBtn").addEventListener("click", () => togglePause(false));
+  el("quitBtn").addEventListener("click", quitToTitle);
+
+  // ---- Title screen zone list --------------------------------------------
+  el("zoneList").innerHTML = ENVS.map((e, i) =>
+    `<li><span class="sw" style="background:${e.line};box-shadow:0 0 8px ${e.line}"></span><span class="nm"><span class="lv">${i + 1}</span>${e.name}</span><span class="nw">${e.isNew}</span></li>`
+  ).join("");
+  updateBestText();
+
+  // ---- Main loop ----------------------------------------------------------
+  function update(dt) {
+    S.envT = Math.min(1, S.envT + dt / 1.6);
+    S.shake = Math.max(0, S.shake - dt * 40);
+    S.flash = Math.max(0, S.flash - dt * 2.5);
+    updateParticles(dt);
+    const p = S.player;
+
+    if (S.mode === "title") {
+      updateFx(dt, 300);
+      p.x += 300 * dt;
+      S.titleT += dt;
+      if (S.titleT > 5) { S.titleT = 0; setEnv((S.envTo + 1) % ENVS.length); }
+      return;
+    }
+    updateFx(dt, S.dead ? 0 : speed());
+    if (S.dead) {
+      S.deadT += dt;
+      if (S.deadT > 0.9) restartLevel();
+      return;
+    }
+
+    S.levelTime += dt;
+    const n = Math.ceil(dt / (1 / 240)), h = dt / n;
+    for (let i = 0; i < n && !S.dead; i++) step(h);
+    S.buffer = Math.max(0, S.buffer - dt);
+    if (S.dead) return;
+
+    if (p.grounded) {
+      const target = Math.round(p.rot / (Math.PI / 2)) * (Math.PI / 2);
+      p.rot += (target - p.rot) * Math.min(1, dt * 22);
+      if (Math.random() < 0.6) {
+        particles.push({ x: p.x + 2, h: p.h + 3, vx: -rand(40, 120), vy: rand(20, 80), life: 0.35, max: 0.35, size: rand(2, 5), color: envOf(S.level).player, g: false });
+      }
+    } else {
+      p.rot += dt * 6.2;
+    }
+    spawn();
+    if (S.portalX !== null && p.x >= S.portalX) levelUp();
+  }
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    if (!S.paused) update(dt);
+    render(now / 1000);
+    updateHud();
+    requestAnimationFrame(frame);
+  }
+
+  function boot(data) {
+    window.addEventListener("resize", resize);
+    resize();
+    setEnv(0);
+    S.envT = 1;
+    // Resume a run in progress after the page is republished.
+    if (data && data.mode === "play" && Number.isInteger(data.level)) {
+      startGame(data.level);
+      S.attempts = data.attempts || 1;
+      togglePause(true);
+    } else {
+      el("playBtn").focus();
+    }
+    requestAnimationFrame(frame);
+  }
+  try { window.claude?.hot?.snapshot?.(() => ({ mode: S.mode, level: S.level, attempts: S.attempts })); } catch { /* no hot reload */ }
+  const hot = window.claude?.hot;
+  if (hot?.ready) hot.ready(boot); else boot(hot?.data ?? {});
+})();
+</script>
