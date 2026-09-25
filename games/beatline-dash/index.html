@@ -189,6 +189,7 @@
     width: 100%; display: grid; gap: 3px; text-align: left; padding: 10px 12px; cursor: pointer;
     font-family: var(--body); font-size: calc(14px * var(--bscale));
   }
+  .levels .sw { display: inline-block; width: 11px; height: 11px; margin-right: 7px; border: 2px solid var(--ink); vertical-align: 1px; }
   .levels button b { font-family: var(--display); font-weight: normal; font-size: calc(16px * var(--dscale)); }
   .levels button:disabled { opacity: 0.45; cursor: not-allowed; }
   .levels button:focus-visible { outline: 3px solid var(--hot); outline-offset: 2px; }
@@ -2408,6 +2409,7 @@
     S.player = { x: S.player.x, h: 0, vy: 0, rot: 0, grounded: true };
     el("pauseScreen").hidden = true;
     el("startScreen").hidden = false;
+    setEnv(0);
     updateBestText();
     el("playBtn").focus({ preventScroll: true });
   }
@@ -3059,7 +3061,7 @@
     const n = Math.max(6, bestLevel);
     el("levelGrid").innerHTML = Array.from({ length: n }, (_, i) => {
       const open = i < bestLevel;
-      return `<li data-style="${styleOf(i).id}"><button class="panel" type="button" data-level="${i}"${open ? "" : " disabled"}><b>Level ${i + 1}</b><span>${zoneName(i)}</span><span>${open ? starsHTML(levelStars(i)) : "Locked"}</span>${open ? `<span>Best ${bestPct[i] || 0}%</span>` : ""}</button></li>`;
+      return `<li><button class="panel" type="button" data-level="${i}"${open ? "" : " disabled"}><b><span class="sw" style="background:${ZONE_SWATCH[styleOf(i).id]}"></span>Level ${i + 1}</b><span>${zoneName(i)}</span><span>${open ? starsHTML(levelStars(i)) : "Locked"}</span>${open ? `<span>Best ${bestPct[i] || 0}%</span>` : ""}</button></li>`;
     }).join("");
   }
 
@@ -3260,9 +3262,10 @@
   });
   el("quitBtn").addEventListener("click", quitToTitle);
 
-  // ---- Title screen zone list (each card wears its own zone's style) ------
+  // ---- Title screen zone list (one look for the whole menu; a swatch marks each zone) ----
+  const ZONE_SWATCH = { meadow: "#74cf4a", forge: "#ef8a23", reef: "#4aa3b8", canopy: "#ff7a3d", glacier: "#7cb2de", void: "#161616" };
   el("zoneList").innerHTML = STYLES.map((s, i) =>
-    `<li data-style="${s.id}"><span class="sw"></span><span class="nm">${i + 1}. ${s.name}</span><span class="nw">${s.isNew}</span></li>`
+    `<li><span class="sw" style="background:${ZONE_SWATCH[s.id]}"></span><span class="nm">${i + 1}. ${s.name}</span><span class="nw">${s.isNew}</span></li>`
   ).join("");
   updateBestText();
 
@@ -3280,8 +3283,6 @@
 
     if (S.mode === "title") {
       p.x += 300 * dt;
-      S.titleT += dt;
-      if (S.titleT > 5) { S.titleT = 0; setEnv((S.envTo + 1) % STYLES.length); }
       updateCamera(dt);
       return;
     }
