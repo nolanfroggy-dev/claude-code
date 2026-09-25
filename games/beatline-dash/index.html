@@ -554,20 +554,20 @@
         }
         g.lineWidth = 2.5; g.strokeStyle = C.grassDk; g.stroke();
         // flowers, bushes and mushrooms along the grass
-        const ds = 90, d0 = Math.floor((camX + x0) / ds) - 1, d1 = Math.ceil((camX + x1) / ds) + 1;
+        const ds = 160, d0 = Math.floor((camX + x0) / ds) - 1, d1 = Math.ceil((camX + x1) / ds) + 1;
         for (let i = d0; i < d1; i++) {
           const kind = hash(i * 23);
-          if (kind < 0.4) continue;
+          if (kind < 0.55) continue;
           const x = i * ds - camX + hash(i * 29) * 50;
           if (x < x0 + 8 || x > x1 - 8) continue;
-          if (kind < 0.72) {                         // flower
+          if (kind < 0.72) {                         // flower (a few)
             const col = [C.red, "#ff6fb5", C.blue, "#ffffff"][Math.floor(hash(i * 31) * 4)];
             g.beginPath(); g.moveTo(x, GROUND); g.lineTo(x, GROUND - 13); g.lineWidth = 2; g.strokeStyle = C.grassDk; g.stroke();
             g.beginPath(); for (let a = 0; a < 5; a++) { const px = x + Math.cos(a * 1.257) * 4, py = GROUND - 15 + Math.sin(a * 1.257) * 4; g.moveTo(px + 3, py); g.arc(px, py, 3, 0, TAU); }
             g.fillStyle = col; g.fill(); g.lineWidth = 1.2; g.strokeStyle = C.ink; g.stroke();
             g.beginPath(); g.arc(x, GROUND - 15, 2.2, 0, TAU); g.fillStyle = C.sun; g.fill();
           } else if (kind < 0.9) {                   // bush
-            g.beginPath(); g.arc(x - 8, GROUND - 5, 8, Math.PI, 0); g.arc(x + 1, GROUND - 9, 10, Math.PI, 0); g.arc(x + 11, GROUND - 5, 7, Math.PI, 0); g.closePath();
+            g.beginPath(); g.moveTo(x - 16, GROUND); g.arc(x - 8, GROUND, 8, Math.PI, Math.PI * 1.75); g.arc(x + 1, GROUND - 3, 10, Math.PI * 1.15, Math.PI * 1.9); g.arc(x + 11, GROUND, 7, Math.PI * 1.3, 0); g.closePath();
             fillOut(g, C.tree, 2.2);
           } else {                                   // mushroom
             g.beginPath(); g.rect(x - 2.5, GROUND - 9, 5, 9); fillOut(g, "#f5ecd8", 1.6);
@@ -576,7 +576,18 @@
           }
         }
       },
-      side(g, x, y0, y1) { g.beginPath(); g.moveTo(x, y0); g.lineTo(x, y1); out(g, 3.5); },
+      side(g, x, y0, y1) {
+        // a ragged cliff face with a few stones poking out, instead of a ruler-straight edge
+        const pts = [[x, y0]];
+        for (let y = y0 + 10, i = 0; y < y1; y += 12, i++) pts.push([x + (hash(Math.round(x) * 0.37 + i * 7.1) - 0.5) * 7, y]);
+        pts.push([x, y1]);
+        g.beginPath(); pts.forEach(([px, py], i) => (i ? g.lineTo(px, py) : g.moveTo(px, py)));
+        g.lineTo(x + (pts.length > 2 ? 0 : 0), y1); out(g, 3.5);
+        for (let y = y0 + 26, i = 0; y < Math.min(y1, y0 + 260); y += 46, i++) {
+          if (hash(Math.round(x) + i * 3.3) < 0.5) continue;
+          g.beginPath(); g.ellipse(x, y, 5, 4, 0, 0, TAU); g.fillStyle = C.rock; g.fill(); out(g, 2);
+        }
+      },
       roof(g, x, w, y) {
         const top = wTop;
         g.fillStyle = C.dirt; g.fillRect(x, top, w, y - top);
@@ -1555,6 +1566,8 @@
       cspike(x, n = 1) { for (let i = 0; i < n; i++) c.o.push({ t: "s", x: x + i, base: c.ceil, dir: -1 }); return c; },
       cblock(x, w, h = 1) { c.o.push({ t: "b", x, w, bot: c.ceil - h, top: c.ceil }); return c; },
       csaw(x) { c.o.push({ t: "saw", kind: "ceil", x, base: c.ceil }); return c; },
+      // a slab of ground hanging over the current floor: the roof of a cave you run through
+      overhang(x, w, clear, thick) { c.o.push({ t: "b", x, w, bot: c.f + clear, top: c.f + clear + thick, terrain: true, back: c.f }); return c; },
     };
     return c;
   }
@@ -2161,7 +2174,7 @@
       c.gap(w(2.6)).run(w(3.5)).spike(c.x).run(w(4));
       c.gap(w(2.6)).run(w(3));
       for (let i = 0; i < 4; i++) c.down().run(w(2.5));
-      c.run(w(1.5));
+      c.run(w(2)).spike(c.x).run(w(3));
     } },
     { lvl: 0, tier: 3, name: "grand staircase", build(c, k, w) {
       const L = stepLen(k);
@@ -2352,6 +2365,55 @@
       c.down().run(w(3));
     } },
 
+    // ---- Caves: climb a hill, drop through a hole into a cave, run out the far side ----
+    { lvl: 0, tier: 1, name: "rabbit hole", build(c, k, w) {
+      const L = stepLen(k);
+      c.run(2).up().run(L).up().run(L).up().run(w(3));
+      const h0 = c.x, ov0 = h0 + w(6), ovw = w(13);
+      c.down(3);
+      c.overhang(ov0, ovw, 3.3, 2.2);            // the hill above the cave; the hole is wide enough that a jump off the edge lands inside
+      c.run(ov0 + ovw + w(3) - c.x);
+      c.spike(ov0 + w(3.5)).spike(ov0 + w(9));
+    } },
+    { lvl: 0, tier: 2, name: "burrow", build(c, k, w) {
+      // a longer cave with a spike pair inside and a step back up at the exit
+      const L = stepLen(k);
+      c.run(2).up().run(L).up().run(L).up().run(w(3));
+      const h0 = c.x, ov0 = h0 + w(6), ovw = w(16);
+      c.down(3);
+      c.overhang(ov0, ovw, 3.3, 2.2);
+      c.run(ov0 + ovw + w(1) - c.x);
+      c.spike(ov0 + w(3.5)).spike(ov0 + w(9.5), 2);
+      c.up().run(w(4));
+    } },
+    { lvl: 1, tier: 2, name: "mine shaft", build(c, k, w) {
+      const L = stepLen(k);
+      c.run(2).up().run(L).up().run(L).up().run(w(3));
+      const h0 = c.x, ov0 = h0 + w(6), ovw = w(14);
+      c.down(3);
+      c.overhang(ov0, ovw, 3.3, 2.2);
+      c.run(ov0 + ovw + w(3) - c.x);
+      c.saw("ground", ov0 + w(4)).spike(ov0 + w(10));
+    } },
+    { lvl: 2, tier: 2, name: "sea cave", build(c, k, w) {
+      const L = stepLen(k);
+      c.run(2).up().run(L).up().run(L).up().run(w(3));
+      const h0 = c.x, ov0 = h0 + w(6), ovw = w(14);
+      c.down(3);
+      c.overhang(ov0, ovw, 3.3, 2.2);
+      c.run(ov0 + ovw + w(3) - c.x);
+      c.spike(ov0 + w(4)).spike(ov0 + w(9), 2);
+    } },
+    { lvl: 3, tier: 2, name: "root hollow", build(c, k, w) {
+      const L = stepLen(k);
+      c.run(2).up().run(L).up().run(L).up().run(w(3));
+      const h0 = c.x, ov0 = h0 + w(6), ovw = w(14);
+      c.down(3);
+      c.overhang(ov0, ovw, 3.3, 2.2);
+      c.run(ov0 + ovw + w(3) - c.x);
+      c.spike(ov0 + w(3.5), 2).spike(ov0 + w(10));
+    } },
+
     // ---- Orbs and pads: climbs, gravity flips and dashes ----
     { lvl: 0, tier: 1, name: "orb step", build(c, k, w) {
       c.run(3);
@@ -2522,7 +2584,7 @@
     switch (s.t) {
       case "f": Object.assign(o, { x: X, w: s.w * B, top: H(s.top), bot: -4000 }); break;
       case "s": Object.assign(o, { x: X, w: B, base: H(s.base), dir: s.dir }); break;
-      case "b": Object.assign(o, { x: X, w: s.w * B, bot: H(s.bot), top: H(s.top) }); break;
+      case "b": Object.assign(o, { x: X, w: s.w * B, bot: H(s.bot), top: H(s.top) }); if (s.terrain) Object.assign(o, { terrain: true, back: H(s.back) }); break;
       case "p": Object.assign(o, { x: X, w: B, base: H(s.base), kind: s.kind || "yellow", dir: s.dir || 1 }); break;
       case "o": Object.assign(o, { x: X, w: B, cy: H(s.cy), kind: s.kind || "yellow" }); break;
       case "star": Object.assign(o, { x: X, w: B, cy: H(s.cy), idx: -1 }); break;
@@ -3144,6 +3206,23 @@
       else if (next.top < f.top) st.side(g, x1, y, GROUND - next.top);
     }
   }
+  // Cave roof: the zone's own ground texture, with a ragged underside and a shadowy cave behind it.
+  function drawOverhang(g, st, x, o, t) {
+    const yb = GROUND - o.bot, yt = GROUND - o.top, yf = GROUND - o.back;
+    g.save(); g.globalAlpha = 0.4; g.fillStyle = "#000000"; g.fillRect(x, yb, o.w, yf - yb); g.restore();
+    g.save();
+    g.beginPath(); g.rect(x, yt - 30, o.w, yb - yt + 30); g.clip();
+    g.translate(0, -o.top);
+    st.ground(g, x - 1, x + o.w + 1, GROUND + o.top - o.bot + 2, t);
+    g.restore();
+    // ragged underside: dirt lumps and short roots hanging down
+    g.beginPath(); g.moveTo(x, yb);
+    for (let px = x + 8, i = 0; px < x + o.w - 4; px += 10, i++) g.lineTo(px, yb + 2 + hash(o.id * 7 + i) * 7);
+    g.lineTo(x + o.w, yb); g.closePath();
+    g.fillStyle = st.ink; g.globalAlpha = 0.55; g.fill(); g.globalAlpha = 1;
+    g.beginPath(); g.moveTo(x, yb); g.lineTo(x + o.w, yb); g.moveTo(x, yt); g.lineTo(x, yb); g.moveTo(x + o.w, yt); g.lineTo(x + o.w, yb);
+    g.lineWidth = 3; g.strokeStyle = st.ink; g.stroke();
+  }
   function drawWorld(g, st, t) {
     const sn = v => (st.pixel ? Math.round(v / PX) * PX : v);
     const cs = sn(camH);
@@ -3172,6 +3251,7 @@
         case "s": st.spike(g, x, GROUND - o.base, o.dir, o.seed); break;
         case "b": {
           const bh = o.top - o.bot;
+          if (o.terrain) { drawOverhang(g, st, x, o, t); break; }
           if (bh % B) { g.save(); g.beginPath(); g.rect(x - 3, GROUND - o.top - 3, o.w + 6, bh + 6); g.clip(); }
           st.block(g, x, GROUND - o.top, o.w, bh, o.seed);
           if (bh % B) g.restore();
@@ -3251,13 +3331,16 @@
     g.restore();
   }
   function drawStyleTo(g, st, t, sx, sy) {
-    if (st.pixel) {
-      lctx.setTransform(1 / PX, 0, 0, 1 / PX, 0, Math.round(offY / PX));
-      drawWorld(lctx, st, t);
+    const px = st.pixel ? PX : 0;
+    if (px) {
+      // the 8-bit zone: draw the world small, then blow it up with hard edges
+      const [cv, lc] = [low, lctx];
+      lc.setTransform(1 / px, 0, 0, 1 / px, 0, Math.round(offY / px));
+      drawWorld(lc, st, t);
       g.setTransform(1, 0, 0, 1, 0, 0);
       g.imageSmoothingEnabled = false;
-      const k = PX * scale * dpr;
-      g.drawImage(low, Math.round(sx * scale * dpr), Math.round(sy * scale * dpr), low.width * k, low.height * k);
+      const k = px * scale * dpr;
+      g.drawImage(cv, Math.round(sx * scale * dpr), Math.round(sy * scale * dpr), cv.width * k, cv.height * k);
       g.imageSmoothingEnabled = true;
     } else {
       g.setTransform(dpr * scale, 0, 0, dpr * scale, sx * dpr * scale, (offY + sy) * dpr * scale);
