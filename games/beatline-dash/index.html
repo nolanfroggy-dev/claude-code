@@ -257,7 +257,7 @@
 <div class="overlay" id="startScreen">
   <div class="sheet panel">
     <h1 class="title">Beatline Dash</h1>
-    <p class="lede">Climb stairs, leap pits, dodge saws and duck under low ceilings. Survive 80 seconds without crashing and a portal warps you to the next zone, drawn in a completely different style. Every zone runs faster and adds a new obstacle. A crash restarts the current zone's 80-second clock.</p>
+    <p class="lede">Climb stairs, leap pits, dodge saws and duck under low ceilings. Survive 45 seconds without crashing and a portal warps you to the next zone, drawn in a completely different style. Every zone runs faster and adds a new obstacle. A crash restarts the current zone's 45-second clock.</p>
     <ul class="zones" id="zoneList"></ul>
     <p class="controls">
       <span><kbd>Space</kbd> <kbd>&uarr;</kbd> <kbd>W</kbd>, click or tap anywhere: jump (hold to keep jumping)</span>
@@ -289,7 +289,7 @@
   "use strict";
 
   // ---- Tuning -------------------------------------------------------------
-  const LEVEL_SECONDS = 80;       // consecutive seconds alive needed to reach the next zone
+  const LEVEL_SECONDS = 45;       // consecutive seconds alive needed to reach the next zone
   const B = 40;                   // one block, in logical pixels
   const P = 34;                   // player cube size
   const DUCK_H = 17;              // player hitbox height while ducking
@@ -2049,8 +2049,8 @@
   // ---- Spawning -----------------------------------------------------------
   const MAX_HB = 6;                        // highest floor level, in blocks
   const snapBeat = x => Math.ceil(x / (2 * B) - 1e-9) * 2 * B;   // chunks start on an 8th note (2 blocks)
-  // Chance of each tier by time into the level: easy early, hardest in the last 20 s.
-  function tierWeights(t) { return t < 20 ? [1, 0.15, 0] : t < 40 ? [0.6, 1, 0.1] : t < 60 ? [0.25, 1, 0.45] : [0, 0.3, 1]; }
+  // Chance of each tier by time into the level: easy in the first quarter, hardest in the last.
+  function tierWeights(t) { const q = t / LEVEL_SECONDS; return q < 0.25 ? [1, 0.15, 0] : q < 0.5 ? [0.6, 1, 0.1] : q < 0.75 ? [0.25, 1, 0.45] : [0, 0.3, 1]; }
   function pickChunk(k, tAt, maxLen) {
     const lvl = S.level % STYLES.length, loop = S.level >= STYLES.length;
     const tw = tierWeights(tAt);
