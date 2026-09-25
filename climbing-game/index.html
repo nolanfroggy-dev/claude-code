@@ -237,34 +237,118 @@
   }
 
   // =====================================================================
-  // 5. WORLD: HOLDS
+  // 5. WORLD: HOLDS & ROUTES
+  // Each grade zone generates one clear route (every hold within reach of
+  // the last), plus small footchips for the feet and a few decoy holds.
   // =====================================================================
-  let holds = [];
-  const gen = { y: 0, x: 0 };
+  const GRADE_EVERY = 25;   // metres per grade
 
-  function addHold(x, y, type = 'jug') {
-    const h = { x, y, type, r: rand(0.3, 0.38), rot: rand(-0.5, 0.5), chalk: 0 };
+  // pump = pump added per second while hanging on the hold
+  const HOLD_TYPES = {
+    jug:     { r: 0.36, pump: 3.5, color: '#ffb238', shade: '#c27a12' },
+    crimp:   { r: 0.3,  pump: 7,   color: '#4d9de0', shade: '#2c5f99' },
+    sloper:  { r: 0.4,  pump: 4.5, color: '#a57be6', shade: '#6a45a6', slipAt: 2 },
+    pinch:   { r: 0.32, pump: 5,   color: '#4fc98a', shade: '#2b8755' },
+    pocket:  { r: 0.24, pump: 6 },
+    crumble: { r: 0.34, pump: 3.5, color: '#caa57d', shade: '#8b6947', breakAt: 1.5 },
+    foot:    { r: 0.12 },
+  };
+
+  let holds = [];
+  const gen = { y: 0, x: 0, n: 0 };
+
+  const gradeAt = y => Math.max(0, Math.floor((y - START_Y) / GRADE_EVERY));
+
+  // How a grade shapes the route: spacing, sideways drift, hold size, decoys.
+  function difficulty(g) {
+    return {
+      gapMin: Math.min(1.1 + g * 0.1, 1.6),
+      gapMax: Math.min(1.7 + g * 0.14, 2.3),
+      dx: Math.min(1.1 + g * 0.18, 1.9),
+      scale: Math.max(0.62, 1 - g * 0.07),
+      decoy: Math.min(0.35 + g * 0.08, 0.7),
+    };
+  }
+
+  function pickType(g) {
+    const w = {
+      jug: Math.max(1.2, 8 - g * 1.6),
+      crimp: 1 + g * 1.3,
+      sloper: g >= 1 ? 0.6 + g * 0.8 : 0.4,
+      pinch: 1 + g * 0.8,
+      pocket: g >= 1 ? 0.5 + g * 0.7 : 0.25,
+      crumble: g >= 1 ? 0.4 + g * 0.6 : 0.25,
+    };
+    let total = 0;
+    for (const k in w) total += w[k];
+    let roll = Math.random() * total;
+    for (const k in w) { roll -= w[k]; if (roll <= 0) return k; }
+    return 'jug';
+  }
+
+  function addHold(x, y, type, scale = 1, route = false) {
+    const def = HOLD_TYPES[type];
+    const h = {
+      x, y, type, route,
+      r: def.r * scale * rand(0.92, 1.08),
+      rot: type === 'crimp' ? rand(-0.2, 0.2) : type === 'pinch' ? rand(-0.3, 0.3) : rand(-0.6, 0.6),
+      chalk: 0,            // white chalk mark after use
+      grip: 0,             // seconds held (for slopers / crumbling holds)
+      wear: 0,             // crumbling damage 0..1
+      broken: false,
+      seed: Math.random() * 1000,
+    };
+    if (type === 'crumble') {
+      h.shape = [];
+      for (let i = 0; i < 9; i++) h.shape.push(rand(0.78, 1.1));
+    }
     holds.push(h);
     return h;
   }
 
+  function isFree(x, y, minD) {
+    return !holds.some(h => !h.broken && dist(h.x, h.y, x, y) < minD);
+  }
+
   function generate(upTo) {
     while (gen.y < upTo) {
-      const gap = rand(1.2, 1.9);
-      const nx = clamp(gen.x + rand(-1.4, 1.4), X_MIN, X_MAX);
-      gen.y += gap;
-      addHold(nx, gen.y);
-      gen.x = nx;
-      if (Math.random() < 0.6) {
-        const ex = rand(X_MIN, X_MAX), ey = gen.y + rand(-0.7, 0.7);
-        if (!holds.some(h => dist(h.x, h.y, ex, ey) < 1.1)) addHold(ex, ey);
+      const g = gradeAt(gen.y);
+      const d = difficulty(g);
+      let dy = rand(d.gapMin, d.gapMax);
+      let nx = gen.x + rand(-d.dx, d.dx);
+      if (nx < X_MIN || nx > X_MAX) nx = 2 * gen.x - nx;         // bounce off the edges
+      nx = clamp(nx, X_MIN, X_MAX);
+      // keep every route move within static reach
+      const len = Math.hypot(nx - gen.x, dy), maxLen = REACH * 0.9;
+      if (len > maxLen) { const k = maxLen / len; nx = gen.x + (nx - gen.x) * k; dy *= k; }
+      const ny = gen.y + dy;
+
+      // clear anything the route hold would overlap
+      holds = holds.filter(h => h.route || dist(h.x, h.y, nx, ny) > 0.8);
+      addHold(nx, ny, gen.n < 4 ? 'jug' : pickType(g), d.scale, true);
+
+      // footchip between the last two route holds
+      if (Math.random() < 0.8) {
+        const fx = clamp(lerp(gen.x, nx, 0.5) + rand(-0.6, 0.6), X_MIN - 0.3, X_MAX + 0.3);
+        const fy = ny - rand(1.0, 1.35);
+        if (isFree(fx, fy, 0.6)) addHold(fx, fy, 'foot');
       }
+      // decoy: off to the side, usually a harder hold
+      if (gen.n > 3 && Math.random() < d.decoy) {
+        const side = nx < WALL_W / 2 ? 1 : -1;
+        const ex = clamp(nx + side * rand(1.5, 2.6), X_MIN, X_MAX);
+        const ey = ny + rand(-0.4, 1.0);
+        if (isFree(ex, ey, 1.1)) addHold(ex, ey, pickType(g + 1), d.scale);
+      }
+      gen.x = nx; gen.y = ny; gen.n++;
     }
   }
 
   // Where each hand sits on a hold.
   function gripPoints(h) {
-    return [{ x: h.x - 0.09, y: h.y + 0.02 }, { x: h.x + 0.09, y: h.y + 0.02 }];
+    const spread = h.type === 'crimp' ? 0.11 : h.type === 'pinch' || h.type === 'pocket' ? 0.055 : 0.09;
+    const top = h.type === 'pinch' ? h.r * 0.5 : h.type === 'crimp' ? h.r * 0.15 : 0.02;
+    return [{ x: h.x - spread, y: h.y + top }, { x: h.x + spread, y: h.y + top }];
   }
 
   // =====================================================================
@@ -306,7 +390,7 @@
     const root = { x: hip.x + s * BODY.hipW, y: hip.y };
     let best = null, bestD = 0.8;
     for (const h of holds) {
-      if (h === c.hold || h === c.footHold[1 - side]) continue;
+      if (h.broken || h === c.hold || h === c.footHold[1 - side]) continue;
       const top = { x: h.x, y: h.y + h.r * 0.45 };
       if (top.y > hip.y - 0.3) continue;
       if (dist(root.x, root.y, top.x, top.y) > LEG * 0.96) continue;
@@ -525,12 +609,15 @@
   let state = 'play';           // play | falling | dead
   let height = 0, time = 0, deadAt = 0;
   let missFx = null;
+  let fallReason = '';
 
   function reset() {
     holds = [];
     gen.y = START_Y; gen.x = WALL_W / 2;
-    const first = addHold(WALL_W / 2, START_Y);
-    first.r = 0.38;
+    gen.n = 0;
+    const first = addHold(WALL_W / 2, START_Y, 'jug', 1.1, true);
+    addHold(WALL_W / 2 - 0.35, START_Y - 1.05, 'foot');
+    addHold(WALL_W / 2 + 0.4, START_Y - 1.0, 'foot');
     generate(START_Y + 30);
     climber = makeClimber(first);
     cam.y = START_Y - (H * 0.4) / S;
@@ -540,7 +627,9 @@
     updateHud(true);
   }
 
-  function onGrab() { /* hooks for sound/particles in later steps */ }
+  function onGrab(h) {
+    h.grip = 0;              // slopers restart their slip timer each grab
+  }
 
   function handsMid() { return mid(climber.handT[0], climber.handT[1]); }
 
@@ -548,6 +637,7 @@
     const tol = Math.max(0.55, 26 / S);
     let target = null, bestD = Infinity;
     for (const h of holds) {
+      if (h.broken || h.type === 'foot') continue;
       const d = dist(h.x, h.y, p.x, p.y);
       if (d < tol + h.r && d < bestD) { bestD = d; target = h; }
     }
@@ -569,10 +659,31 @@
     const h = holdAt(p);
     if (!h || h === climber.hold) { missFx = { x: p.x, y: p.y, t: 0 }; return; }
     if (canReach(h)) startReach(climber, h);
-    else startFall();
+    else startFall('TOO FAR');
   }
 
-  function startFall() {
+  // Hold mechanics while hanging: slopers slip, crumbling holds break.
+  function updateHoldTimers(dt) {
+    const h = climber.hold;
+    if (!h || climber.move) return;
+    h.grip += dt;
+    if (h.type === 'crumble') {
+      h.wear = Math.min(1, h.wear + dt / HOLD_TYPES.crumble.breakAt);
+      if (h.wear >= 1) {
+        h.broken = true;
+        startFall('HOLD BROKE');
+      }
+    } else if (h.type === 'sloper') {
+      // hands creep down the dome as the slip nears
+      const slip = clamp((h.grip - 1.3) / 0.7, 0, 1);
+      const g = gripPoints(h);
+      climber.handT = g.map(p => ({ x: p.x, y: p.y - slip * 0.12 }));
+      if (h.grip >= HOLD_TYPES.sloper.slipAt) startFall('SLIPPED');
+    }
+  }
+
+  function startFall(reason) {
+    fallReason = reason || '';
     state = 'falling';
     const c = climber;
     c.pose = 'fall';
@@ -598,6 +709,7 @@
     time += dt;
     if (missFx) { missFx.t += dt; if (missFx.t > 0.35) missFx = null; }
 
+    if (state === 'play') updateHoldTimers(dt);
     updateClimber(climber, dt, time);
 
     if (state === 'play') {
@@ -606,7 +718,7 @@
       const target = climber.hip.y - (H * 0.36) / S;
       cam.y += (target - cam.y) * Math.min(1, dt * 4);
       generate(cam.y + H / S + 10);
-      holds = holds.filter(h => h.y > cam.y - 4 || h === climber.hold);
+      holds = holds.filter(h => (h.y > cam.y - 4 && !(h.broken && h !== climber.hold)) || h === climber.hold);
     } else if (state === 'falling') {
       if (sy(climber.hip.y + 2) > H + 40) {
         state = 'dead';
@@ -649,28 +761,172 @@
     }
   }
 
+  // Hold artwork. Everything is drawn in the hold's local, rotated frame.
   function drawHold(h, reachable) {
+    if (h.broken) return;
     const x = sx(h.x), y = sy(h.y), r = h.r * S;
-    if (y < -r * 3 || y > H + r * 3) return;
+    if (y < -r * 4 || y > H + r * 4) return;
+    const def = HOLD_TYPES[h.type];
     ctx.save();
     ctx.translate(x, y);
+    if (h.type === 'crumble' && h.wear > 0.5) {
+      const k = (h.wear - 0.5) * 2 * 0.06 * S;
+      ctx.translate(Math.sin(time * 61 + h.seed) * k, Math.sin(time * 47) * k * 0.5);
+    }
     ctx.rotate(h.rot);
-    ctx.fillStyle = 'rgba(0,0,0,0.28)';
-    ctx.beginPath(); ctx.ellipse(r * 0.12, r * 0.2, r * 1.05, r * 0.82, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = COL.jugShade;
-    ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.8, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = COL.jug;
-    ctx.beginPath(); ctx.ellipse(-r * 0.06, -r * 0.12, r * 0.84, r * 0.6, 0, 0, Math.PI * 2); ctx.fill();
-    if (h.chalk > 0) {
-      ctx.fillStyle = `rgba(255,255,255,${0.55 * h.chalk})`;
-      ctx.beginPath(); ctx.ellipse(-r * 0.1, -r * 0.3, r * 0.5, r * 0.22, 0, 0, Math.PI * 2); ctx.fill();
+
+    const shadow = (w, hh, ox = 0.12, oy = 0.2) => {
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath(); ctx.ellipse(r * ox, r * oy, w, hh, 0, 0, Math.PI * 2); ctx.fill();
+    };
+    const chalkMark = (cx, cy, w, hh) => {
+      if (h.chalk <= 0) return;
+      ctx.fillStyle = `rgba(255,255,255,${0.7 * h.chalk})`;
+      ctx.beginPath(); ctx.ellipse(cx, cy, w, hh, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = `rgba(255,255,255,${0.35 * h.chalk})`;
+      ctx.beginPath(); ctx.ellipse(cx + w * 0.4, cy + hh * 0.9, w * 0.45, hh * 0.6, 0, 0, Math.PI * 2); ctx.fill();
+    };
+
+    switch (h.type) {
+      case 'jug': {
+        shadow(r * 1.05, r * 0.85);
+        ctx.fillStyle = def.shade;
+        ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.82, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = def.color;
+        ctx.beginPath(); ctx.ellipse(-r * 0.05, r * 0.08, r * 0.86, r * 0.62, 0, 0, Math.PI * 2); ctx.fill();
+        // the incut lip you grab
+        ctx.fillStyle = 'rgba(40,20,0,0.55)';
+        ctx.beginPath(); ctx.ellipse(0, -r * 0.32, r * 0.62, r * 0.2, 0, 0, Math.PI * 2); ctx.fill();
+        chalkMark(-r * 0.05, -r * 0.5, r * 0.5, r * 0.16);
+        break;
+      }
+      case 'crimp': {
+        const w = r * 1.3, t = r * 0.34;
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        roundRect(-w + r * 0.08, -t + r * 0.16, w * 2, t * 2.1, t); ctx.fill();
+        ctx.fillStyle = def.shade;
+        roundRect(-w, -t, w * 2, t * 2, t); ctx.fill();
+        ctx.fillStyle = def.color;
+        roundRect(-w * 0.95, -t, w * 1.9, t * 1.2, t * 0.6); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        ctx.fillRect(-w * 0.8, -t * 0.9, w * 1.6, Math.max(1, t * 0.25));
+        chalkMark(0, -t * 0.4, w * 0.75, t * 0.5);
+        break;
+      }
+      case 'sloper': {
+        shadow(r * 1.05, r * 0.95, 0.1, 0.14);
+        const gr = ctx.createRadialGradient(-r * 0.35, -r * 0.4, r * 0.1, 0, 0, r);
+        gr.addColorStop(0, '#d6bff7');
+        gr.addColorStop(0.45, def.color);
+        gr.addColorStop(1, def.shade);
+        ctx.fillStyle = gr;
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+        chalkMark(-r * 0.1, -r * 0.45, r * 0.55, r * 0.25);
+        break;
+      }
+      case 'pinch': {
+        const w = r * 0.52, hh = r * 1.2;
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        roundRect(-w + r * 0.1, -hh + r * 0.15, w * 2, hh * 2, w); ctx.fill();
+        ctx.fillStyle = def.shade;
+        roundRect(-w, -hh, w * 2, hh * 2, w); ctx.fill();
+        ctx.fillStyle = def.color;
+        roundRect(-w * 0.9, -hh, w * 1.3, hh * 1.9, w * 0.7); ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+        ctx.lineWidth = Math.max(1, r * 0.08);
+        ctx.beginPath(); ctx.moveTo(w * 0.2, -hh * 0.75); ctx.lineTo(w * 0.2, hh * 0.75); ctx.stroke();
+        chalkMark(-w * 0.2, -hh * 0.55, w * 0.7, hh * 0.3);
+        break;
+      }
+      case 'pocket': {
+        // a hole in the rock: barely visible rim, dark interior
+        ctx.fillStyle = 'rgba(255,255,255,0.07)';
+        ctx.beginPath(); ctx.ellipse(0, -r * 0.08, r * 1.15, r * 0.82, 0, 0, Math.PI * 2); ctx.fill();
+        const gr = ctx.createRadialGradient(0, r * 0.15, 0, 0, 0, r);
+        gr.addColorStop(0, 'rgba(0,0,0,0.85)');
+        gr.addColorStop(0.7, 'rgba(0,0,0,0.55)');
+        gr.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = gr;
+        ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.7, 0, 0, Math.PI * 2); ctx.fill();
+        chalkMark(0, -r * 0.62, r * 0.6, r * 0.14);
+        break;
+      }
+      case 'crumble': {
+        shadow(r * 1.0, r * 0.85);
+        ctx.fillStyle = def.shade;
+        ctx.beginPath();
+        h.shape.forEach((k, i) => {
+          const a = (i / h.shape.length) * Math.PI * 2;
+          ctx.lineTo(Math.cos(a) * r * k, Math.sin(a) * r * k * 0.8);
+        });
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = def.color;
+        ctx.beginPath();
+        h.shape.forEach((k, i) => {
+          const a = (i / h.shape.length) * Math.PI * 2;
+          ctx.lineTo(Math.cos(a) * r * k * 0.82 - r * 0.05, Math.sin(a) * r * k * 0.62 - r * 0.06);
+        });
+        ctx.closePath(); ctx.fill();
+        // cracks: always a hairline, spreading as it wears
+        ctx.strokeStyle = 'rgba(50,30,15,0.8)';
+        ctx.lineWidth = Math.max(1, r * 0.07);
+        const n = 1 + Math.floor(h.wear * 4);
+        for (let i = 0; i < n; i++) {
+          const a = h.seed + i * 2.1;
+          const len = r * (0.35 + h.wear * 0.55);
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(Math.cos(a) * len * 0.5, Math.sin(a) * len * 0.5 + r * 0.08);
+          ctx.lineTo(Math.cos(a + 0.4) * len, Math.sin(a + 0.4) * len * 0.8);
+          ctx.stroke();
+        }
+        chalkMark(0, -r * 0.4, r * 0.45, r * 0.15);
+        break;
+      }
+      case 'foot': {
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath(); ctx.ellipse(r * 0.2, r * 0.3, r * 1.1, r * 0.8, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#5b6068';
+        ctx.beginPath(); ctx.ellipse(0, 0, r * 1.1, r * 0.75, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#767c85';
+        ctx.beginPath(); ctx.ellipse(-r * 0.2, -r * 0.2, r * 0.7, r * 0.4, 0, 0, Math.PI * 2); ctx.fill();
+        break;
+      }
     }
     ctx.restore();
+
     if (reachable) {
       ctx.strokeStyle = COL.reach;
       ctx.lineWidth = 2.5;
-      ctx.beginPath(); ctx.arc(x, y, r * 1.45, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, Math.max(r * 1.5, 16), 0, Math.PI * 2); ctx.stroke();
     }
+
+    // Countdown ring on slopers and crumbling holds while held
+    if (h === climber.hold && state === 'play') {
+      let left = -1;
+      if (h.type === 'sloper') left = 1 - h.grip / HOLD_TYPES.sloper.slipAt;
+      if (h.type === 'crumble') left = 1 - h.wear;
+      if (left >= 0) {
+        const rr = Math.max(r * 1.6, 18);
+        ctx.lineCap = 'round';
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+        ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = left < 0.35 ? COL.danger : '#ffd166';
+        ctx.beginPath(); ctx.arc(x, y, rr, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left); ctx.stroke();
+      }
+    }
+  }
+
+  function roundRect(x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
   }
 
   function drawReach() {
@@ -706,6 +962,7 @@
     ctx.save();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+    ctx.lineWidth = 1;
 
     // Legs
     for (let i = 0; i < 2; i++) {
@@ -832,7 +1089,7 @@
     ctx.textBaseline = 'middle';
     ctx.fillStyle = COL.danger;
     ctx.font = '800 56px "Barlow Condensed", system-ui, sans-serif';
-    ctx.fillText('YOU FELL', W / 2, H * 0.4);
+    ctx.fillText(fallReason || 'YOU FELL', W / 2, H * 0.4);
     ctx.fillStyle = '#fbf7ef';
     ctx.font = '600 22px "Barlow Condensed", system-ui, sans-serif';
     ctx.fillText('Tap anywhere to climb again', W / 2, H * 0.4 + 50);
@@ -844,7 +1101,7 @@
     drawWall();
     drawReach();
     const idle = state === 'play' && !climber.move;
-    for (const h of holds) drawHold(h, idle && h !== climber.hold && canReach(h));
+    for (const h of holds) drawHold(h, idle && h !== climber.hold && h.type !== 'foot' && canReach(h));
     if (missFx) {
       ctx.strokeStyle = COL.danger;
       ctx.globalAlpha = 1 - missFx.t / 0.35;
