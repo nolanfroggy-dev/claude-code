@@ -383,6 +383,7 @@
     padding: 8px 12px;
     text-align: left;
   }
+  .stat.wide { grid-column: span 2; }
   .stat b { display: block; font-weight: 800; font-size: 30px; line-height: 1.05; font-variant-numeric: tabular-nums; }
   .stat span { font-weight: 700; font-size: 12px; letter-spacing: 0.14em; color: var(--muted); }
   .card .btns { display: grid; gap: 10px; width: 100%; justify-items: center; }
@@ -488,7 +489,8 @@
       <div class="stat"><b id="overGrade">V0</b><span>GRADE REACHED</span></div>
       <div class="stat"><b id="overHolds">0</b><span>HOLDS GRABBED</span></div>
       <div class="stat"><b id="overDynos">0</b><span>DYNOS LANDED</span></div>
-      <div class="stat"><b id="overBest">0 m</b><span>BEST HEIGHT</span></div>
+      <div class="stat"><b id="overSends">0</b><span>PROBLEMS SENT</span></div>
+      <div class="stat wide"><b id="overBest">0 m</b><span>BEST HEIGHT</span></div>
     </div>
     <div class="btns">
       <button class="btn btn-go" id="continueBtn" hidden>Continue from ledge</button>
@@ -592,7 +594,7 @@
   // =====================================================================
   const STORE_KEY = 'crux.v2';
   const save = (() => {
-    const defaults = { best: 0, bestGrade: 0, runs: 0, holds: 0, dynos: 0, tutorialDone: false, muted: false };
+    const defaults = { best: 0, bestGrade: 0, runs: 0, holds: 0, dynos: 0, sends: 0, tutorialDone: false, muted: false, seen: {} };
     let data = { ...defaults };
     try {
       const raw = localStorage.getItem(STORE_KEY);
@@ -786,13 +788,42 @@
     undercling: { r: 0.34, pump: 5, color: '#ff7fa8', shade: '#b8456f' },  // grabbed from below
     volume:  { r: 0.55, pump: 2.5, color: '#8fa3b8', shade: '#566a80' },   // big, easy geometric block
     rail:    { r: 0.3,  pump: 4.5, color: '#ef5b4f', shade: '#a8322a' },   // long flat bar
+    dualtex: { r: 0.36, pump: 3.5, color: '#c6d93b', shade: '#8a9a1f', smooth: '#e8edf1', slipAt: 2.2 }, // grippy half + smooth half
+    macro:   { r: 0.62, pump: 2.5, color: '#2e333b', shade: '#16181d' },   // huge palmable blob: easy, but no rest
     foot:    { r: 0.12 },
     ledge:   { r: 0.3,  pump: -40 },
   };
   const LEDGE_EVERY = 50;   // metres between rest ledges
 
   let holds = [];
-  const gen = { y: 0, x: 0, n: 0, sinceDyno: 0, last: null, prevType: null };
+  const gen = { y: 0, x: 0, n: 0, sinceDyno: 0, last: null, prevType: null, prob: null };
+
+  // Gym-style problems: a run of route holds marked with one tape colour,
+  // a START tag on the first hold and a TOP tag on the last.
+  const TAPES = [
+    ['PINK', '#ff4f81'], ['BLUE', '#3fa7ff'], ['YELLOW', '#ffd23f'], ['GREEN', '#7ed957'],
+    ['PURPLE', '#b37bff'], ['WHITE', '#f5f5f5'], ['ORANGE', '#ff8c2b'], ['BLACK', '#1d1d22'],
+  ];
+  let problemId = 0;
+  function newProblem() {
+    const prev = gen.prob ? gen.prob.tape : -1;
+    let t;
+    do { t = Math.floor(Math.random() * TAPES.length); } while (t === prev);
+    return { id: ++problemId, tape: t, left: 6 + Math.floor(Math.random() * 4), started: false };
+  }
+  function tapeHold(h) {
+    if (!gen.prob || gen.prob.left <= 0) gen.prob = newProblem();
+    const p = gen.prob;
+    h.tape = p.tape;
+    h.problem = p.id;
+    if (!p.started) { h.start = true; p.started = true; }
+    if (--p.left === 0) h.top = true;
+  }
+  function closeProblem() {
+    const l = gen.last;
+    if (l && l.tape != null && !l.top) l.top = true;
+    gen.prob = null;
+  }
 
   const gradeAt = y => Math.max(0, Math.floor((y - START_Y) / GRADE_EVERY));
 
@@ -812,6 +843,8 @@
       jug: Math.max(1, 3.5 - g * 0.6),
       volume: Math.max(0.5, 1.4 - g * 0.2),
       rail: 1.2,
+      dualtex: 0.9 + g * 0.3,
+      macro: Math.max(0.5, 1 - g * 0.1),
       pinch: 1.2 + g * 0.4,
       crimp: 1 + g * 0.9,
       undercling: 0.8 + g * 0.4,
@@ -837,11 +870,12 @@
       variant: Math.floor(Math.random() * 3),   // shape variation within a type
       chalk: 0,            // white chalk mark after use
       grip: 0,             // seconds held (for slopers / crumbling holds)
+      good: true,          // dual-tex: grabbed on the grippy side?
       wear: 0,             // crumbling damage 0..1
       broken: false,
       seed: Math.random() * 1000,
     };
-    if (type === 'crumble') {
+    if (type === 'crumble' || type === 'macro') {
       h.shape = [];
       for (let i = 0; i < 9; i++) h.shape.push(rand(0.78, 1.1));
     }
@@ -854,6 +888,13 @@
   }
 
   // The point of a hold nearest to p (ledges span the whole wall).
+  // Dual-tex: which half did you grab? The grippy half is the left side of
+  // the hold's own (rotated) frame.
+  function grippySide(h, p) {
+    const dx = p.x - h.x, dy = p.y - h.y;
+    return dx * Math.cos(h.rot) - dy * Math.sin(h.rot) <= 0;
+  }
+
   function holdPoint(h, p) {
     if (h.type === 'ledge') return { x: clamp(p.x, X_MIN, X_MAX), y: h.y };
     return { x: h.x, y: h.y };
@@ -875,6 +916,7 @@
       // A rest ledge every 50 m, reachable from the last route hold.
       const nextLedge = START_Y + LEDGE_EVERY * Math.ceil((gen.y - START_Y + 0.01) / LEDGE_EVERY);
       if (nextLedge - gen.y <= 2.2 && gen.n > 0) {
+        closeProblem();
         gen.last = addLedge(nextLedge);
         gen.y = nextLedge;
         gen.x = rand(X_MIN + 0.3, X_MAX - 0.3);
@@ -911,6 +953,7 @@
       const type = gen.n < 2 ? 'jug' : isDyno ? (Math.random() < 0.6 ? 'jug' : 'volume') : pickType(g, repeat);
       gen.prevType = prev;
       gen.last = addHold(nx, ny, type, d.scale, true);
+      tapeHold(gen.last);
 
       // footchip between the last two route holds
       if (Math.random() < 0.45) {
@@ -923,7 +966,11 @@
         const side = nx < WALL_W / 2 ? 1 : -1;
         const ex = clamp(nx + side * rand(1.5, 2.6), X_MIN, X_MAX);
         const ey = ny + rand(-0.4, 1.0);
-        if (isFree(ex, ey, 1.1)) addHold(ex, ey, pickType(g + 1), d.scale);
+        if (isFree(ex, ey, 1.1)) {
+          // decoys belong to other problems: different tape colour
+          const dh = addHold(ex, ey, pickType(g + 1), d.scale);
+          dh.tape = (gen.prob.tape + 1 + Math.floor(Math.random() * (TAPES.length - 1))) % TAPES.length;
+        }
       }
       gen.x = nx; gen.y = ny; gen.n++;
     }
@@ -936,9 +983,9 @@
       return [{ x: x - 0.12, y: h.y + 0.04 }, { x: x + 0.12, y: h.y + 0.04 }];
     }
     const spread = h.type === 'crimp' || h.type === 'rail' ? 0.12 : h.type === 'pinch' || h.type === 'pocket' ? 0.055
-      : h.type === 'volume' ? 0.13 : 0.09;
+      : h.type === 'volume' ? 0.13 : h.type === 'macro' ? 0.16 : 0.09;
     const top = h.type === 'pinch' ? h.r * 0.5 : h.type === 'crimp' || h.type === 'rail' ? h.r * 0.15
-      : h.type === 'volume' ? h.r * 0.45 : h.type === 'undercling' ? -h.r * 0.45 : 0.02;
+      : h.type === 'volume' ? h.r * 0.45 : h.type === 'macro' ? h.r * 0.35 : h.type === 'undercling' ? -h.r * 0.45 : 0.02;
     return [{ x: h.x - spread, y: h.y + top }, { x: h.x + spread, y: h.y + top }];
   }
 
@@ -1257,7 +1304,7 @@
       src.start(t0, Math.random() * 0.5);
       src.stop(t0 + dur + 0.05);
     }
-    const PITCH = { jug: 1, crimp: 1.45, sloper: 0.8, pinch: 1.2, pocket: 1.3, crumble: 0.9, ledge: 0.7, undercling: 1.1, volume: 0.6, rail: 1.25 };
+    const PITCH = { jug: 1, crimp: 1.45, sloper: 0.8, pinch: 1.2, pocket: 1.3, crumble: 0.9, ledge: 0.7, undercling: 1.1, volume: 0.6, rail: 1.25, dualtex: 1.1, macro: 0.55 };
     return {
       init,
       get muted() { return muted; },
@@ -1296,6 +1343,10 @@
         this.chime();
       },
       click() { tone({ f: 900, f2: 600, dur: 0.05, vol: 0.1 }); },
+      send() {
+        [659.25, 880, 1174.66].forEach((f, i) => tone({ f, type: 'triangle', dur: 0.3, vol: 0.16, delay: i * 0.07 }));
+        noise({ dur: 0.18, vol: 0.12, type: 'highpass', f: 4000, delay: 0.2 });
+      },
     };
   })();
   document.addEventListener('pointerdown', () => Sound.init(), { capture: true });
@@ -1418,7 +1469,7 @@
   let height = 0, time = 0;
   let missFx = null;
   let fallReason = '';
-  const stats = { holds: 0, dynos: 0, grade: 0 };
+  const stats = { holds: 0, dynos: 0, grade: 0, sends: 0 };
   let prevBest = 0, celebrated = false;
   let checkpoint = null, checkpointUsed = false;
   function onLedge() { Sound.rest(); buzz([15, 40, 15]); }
@@ -1426,8 +1477,10 @@
   function reset() {
     holds = [];
     gen.y = START_Y; gen.x = WALL_W / 2;
-    gen.n = 0; gen.sinceDyno = 0; gen.last = null;
+    gen.n = 0; gen.sinceDyno = 0; gen.last = null; gen.prevType = null; gen.prob = null;
     const first = addHold(WALL_W / 2, START_Y, 'jug', 1.1, true);
+    tapeHold(first);
+    gen.last = first;
     addHold(WALL_W / 2 - 0.35, START_Y - 1.05, 'foot');
     addHold(WALL_W / 2 + 0.4, START_Y - 1.0, 'foot');
     generate(START_Y + 30);
@@ -1437,7 +1490,7 @@
     chalk.uses = CHALK.max; chalk.t = 0;
     missFx = null;
     floats = [];
-    stats.holds = 0; stats.dynos = 0; stats.grade = 0;
+    stats.holds = 0; stats.dynos = 0; stats.grade = 0; stats.sends = 0;
     prevBest = save.data.best; celebrated = false;
     particles = []; confetti = []; shake.mag = 0;
     checkpoint = null; checkpointUsed = false;
@@ -1453,6 +1506,27 @@
     const gp = holdPoint(h, handsMid());
     chalkPuff(gp.x, gp.y + 0.05, false);
     if (!fromDyno) { Sound.grab(h.type); buzz(10); }
+    if (state === 'play') {
+      const tape = h.tape != null ? TAPES[h.tape] : null;
+      if (h.type === 'dualtex') {
+        floatText(h.good ? 'GRIPPY SIDE' : 'SMOOTH SIDE!', gp.x, gp.y + 0.7, h.good ? '#c6d93b' : '#ffd166', 20);
+      }
+      if (h.start && h.route && !h.announced) {
+        h.announced = true;
+        floatText(`${tape[0]} PROBLEM · V${gradeAt(h.y)}`, gp.x, gp.y + 0.9, tape[1], 20);
+      }
+      if (h.top && !h.sent) {
+        h.sent = true;
+        stats.sends++;
+        climber.pump = Math.max(0, climber.pump - 25);
+        chalk.uses = Math.min(CHALK.max, chalk.uses + 1);
+        floatText(`SENT! ${tape[0]} V${gradeAt(h.y)}`, gp.x, gp.y + 0.9, tape[1] === '#1d1d22' ? '#fbf7ef' : tape[1], 30, 1.8);
+        launchConfetti(45);
+        Sound.send();
+        buzz([20, 30, 20]);
+        addShake(4);
+      }
+    }
     if (h.type === 'ledge' && !h.visited) {
       h.visited = true;
       climber.pump = 0;
@@ -1503,6 +1577,7 @@
     }
     if (!h || h === climber.hold) { missFx = { x: p.x, y: p.y, t: 0 }; return; }
     if (canReach(h)) {
+      if (h.type === 'dualtex') h.good = grippySide(h, p);
       climber.pump = Math.min(100, climber.pump + PUMP.moveCost);
       startReach(climber, h);
     } else {
@@ -1632,6 +1707,7 @@
   function catchHold(h) {
     const c = climber;
     if (h.type === 'ledge') h.grabX = clamp(c.dyno.p.x, X_MIN, X_MAX);
+    if (h.type === 'dualtex') h.good = grippySide(h, c.dyno.p);
     c.dyno = null;
     c.hold = h;
     c.handT = gripPoints(h);
@@ -1668,12 +1744,13 @@
         debris(h.x, h.y);
         startFall('HOLD BROKE');
       }
-    } else if (h.type === 'sloper') {
-      // hands creep down the dome as the slip nears
-      const slip = clamp((h.grip - 1.3) / 0.7, 0, 1);
+    } else if (h.type === 'sloper' || (h.type === 'dualtex' && !h.good)) {
+      // hands creep down the smooth surface as the slip nears
+      const at = HOLD_TYPES[h.type].slipAt;
+      const slip = clamp((h.grip - (at - 0.7)) / 0.7, 0, 1);
       const g = gripPoints(h);
       climber.handT = g.map(p => ({ x: p.x, y: p.y - slip * 0.12 }));
-      if (h.grip >= HOLD_TYPES.sloper.slipAt) startFall('SLIPPED');
+      if (h.grip >= at) startFall('SLIPPED');
     }
   }
 
@@ -1682,7 +1759,9 @@
     const c = climber, h = c.hold;
     if (!h || c.move) return;
     let rate = HOLD_TYPES[h.type].pump * (1 + PUMP.gradeMult * gradeAt(h.y));
-    if (h.type === 'jug' && h.grip > PUMP.jugSettle) rate = PUMP.jugRest;
+    const restful = h.type === 'jug' || (h.type === 'dualtex' && h.good);
+    if (h.type === 'dualtex' && !h.good) rate = 5 * (1 + PUMP.gradeMult * gradeAt(h.y));
+    else if (restful && h.grip > PUMP.jugSettle) rate = PUMP.jugRest;
     c.pump = clamp(c.pump + rate * dt, 0, 100);
     if (c.pump >= 100) startFall('PUMPED OUT');
   }
@@ -1702,7 +1781,7 @@
     chalk.uses--;
     c.pump = Math.max(0, c.pump - CHALK.restore);
     c.hold.chalk = 1;
-    if (c.hold.type === 'sloper') c.hold.grip = 0;   // fresh chalk resets a sloper
+    if (c.hold.type === 'sloper' || c.hold.type === 'dualtex') c.hold.grip = 0;   // fresh chalk resets a slip
     c.dip = { hand: c.nextShakeHand, t: 0, dur: 0.55 };
     c.shake = null;
     tut.chalked = true;
@@ -1751,8 +1830,29 @@
 
   // ---------- Floating text ----------
   let floats = [];
-  function floatText(text, x, y, color, size) {
-    floats.push({ text, x, y, color, size, t: 0, life: 1.1 });
+  function floatText(text, x, y, color, size, life = 1.1) {
+    floats.push({ text, x, y, color, size, t: 0, life });
+  }
+
+  // One-time hints the first time a new kind of hold comes into reach.
+  const HINTS = {
+    dualtex: 'DUAL-TEX · TAP THE GRIPPY GREEN SIDE',
+    macro: 'MACRO · EASY TO HOLD, BUT NO REST',
+    top: 'GRAB THE TOP TAG TO SEND THE PROBLEM',
+  };
+  let hintT = 0;
+  function updateHints(dt) {
+    if ((hintT -= dt) > 0 || climber.move || !climber.hold) return;
+    hintT = 0.4;
+    const seen = save.data.seen;
+    for (const h of holds) {
+      const key = h.top && h.route ? 'top' : h.type;
+      if (!HINTS[key] || seen[key] || h === climber.hold || !canReach(h)) continue;
+      seen[key] = true;
+      save.write();
+      floatText(HINTS[key], h.x, h.y + 0.8, '#fbf7ef', 18, 3);
+      return;
+    }
   }
 
   // ---------- Pointer input ----------
@@ -1827,7 +1927,7 @@
     updateConfetti(realDt);
     updateParticles(dt);
     updateChalk(dt);
-    if (state === 'play') { updateHoldTimers(dt); updatePump(dt); updateTutorial(realDt); }
+    if (state === 'play') { updateHoldTimers(dt); updatePump(dt); updateTutorial(realDt); updateHints(realDt); }
     if (state === 'menu') updateAttract(dt);
     if (state === 'play' || state === 'menu') updateDyno(dt);
     climber.coil = press.charging && !!climber.hold;
@@ -1885,6 +1985,7 @@
     const next = holds.filter(h => h.route && h !== c.hold && h.y > hm.y + 0.3).sort((a, b) => a.y - b.y)[0];
     if (!next) return;
     if (next.type === 'ledge') next.grabX = clamp(hm.x, X_MIN, X_MAX);
+    next.good = true;
     if (canReach(next)) { startReach(c, next); return; }
     // aim a dyno so the hands pass the hold on the way up
     const q = holdPoint(next, hm), dx = q.x - hm.x, dy = q.y - hm.y;
@@ -1932,6 +2033,7 @@
     d.runs++;
     d.holds += stats.holds;
     d.dynos += stats.dynos;
+    d.sends += stats.sends;
     d.bestGrade = Math.max(d.bestGrade, stats.grade);
     save.write();
     endTutorial(false);
@@ -1941,6 +2043,7 @@
     $('overGrade').textContent = `V${stats.grade}`;
     $('overHolds').textContent = stats.holds;
     $('overDynos').textContent = stats.dynos;
+    $('overSends').textContent = stats.sends;
     $('overBest').textContent = `${d.best} m`;
     $('overNewBest').hidden = !(isBest && height > 0);
     const cont = $('continueBtn');
@@ -2344,6 +2447,47 @@
     }
   }
 
+  // Gym tape next to each hold: problem colour, START and TOP tags.
+  function drawTape(h) {
+    const x = sx(h.x), y = sy(h.y), r = h.r * S;
+    if (y < -60 || y > H + 60) return;
+    const [, col] = TAPES[h.tape];
+    const ink = h.tape === 7 ? '#fbf7ef' : '#1d1d22';
+    const strip = (px, py, ang) => {
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(ang);
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.fillRect(-0.15 * S + 1, -0.04 * S + 1.5, 0.3 * S, 0.08 * S);
+      ctx.fillStyle = col;
+      ctx.fillRect(-0.15 * S, -0.04 * S, 0.3 * S, 0.08 * S);
+      ctx.restore();
+    };
+    const off = Math.max(r, 12);
+    if (h.start) {
+      // two strips in a V under the start hold
+      strip(x - off * 0.45, y + off * 1.05, 0.7);
+      strip(x + off * 0.45, y + off * 1.05, -0.7);
+      label('START', x - off - 0.3 * S, y + off * 0.45, col, ink);
+    } else {
+      strip(x + off * 0.95, y + off * 0.8, -0.6);
+    }
+    if (h.top) label(h.sent ? 'SENT ✓' : 'TOP', x + off + 0.28 * S, y - off * 0.55, col, ink);
+  }
+  function label(text, x, y, bg, ink) {
+    ctx.font = '800 12px "Barlow Condensed", system-ui, sans-serif';
+    const w = ctx.measureText(text).width + 10;
+    x = clamp(x, w / 2 + 4, W - w / 2 - 4);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    roundRect(x - w / 2 + 1, y - 8 + 2, w, 16, 4); ctx.fill();
+    ctx.fillStyle = bg;
+    roundRect(x - w / 2, y - 8, w, 16, 4); ctx.fill();
+    ctx.fillStyle = ink;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x, y + 0.5);
+  }
+
   // Hold artwork. Everything is drawn in the hold's local, rotated frame.
   function drawHold(h, reachable) {
     if (h.broken) return;
@@ -2404,6 +2548,58 @@
           ctx.beginPath(); ctx.ellipse(0, -r * 0.32, r * 0.62, r * 0.2, 0, 0, Math.PI * 2); ctx.fill();
         }
         chalkMark(-r * 0.05, -r * 0.5, r * 0.5, r * 0.16);
+        break;
+      }
+      case 'dualtex': {
+        // two-tone: grippy textured half (left) and glossy smooth half (right)
+        shadow(r * 1.05, r * 0.85);
+        const half = (left, fill) => {
+          ctx.save();
+          ctx.beginPath(); ctx.rect(left ? -r * 1.3 : 0, -r * 1.3, r * 1.3, r * 2.6); ctx.clip();
+          ctx.fillStyle = fill;
+          ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.8, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.restore();
+        };
+        half(true, def.color);
+        half(false, def.smooth);
+        // grip texture dots
+        ctx.fillStyle = def.shade;
+        for (let i = 0; i < 7; i++) {
+          const a = h.seed + i * 1.7, rr = r * (0.25 + (i % 3) * 0.2);
+          ctx.beginPath(); ctx.arc(-Math.abs(Math.cos(a)) * rr - r * 0.1, Math.sin(a) * rr * 0.7, Math.max(1, r * 0.07), 0, Math.PI * 2); ctx.fill();
+        }
+        // gloss on the smooth half
+        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+        ctx.beginPath(); ctx.ellipse(r * 0.45, -r * 0.35, r * 0.28, r * 0.12, -0.4, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+        ctx.lineWidth = Math.max(1, r * 0.06);
+        ctx.beginPath(); ctx.moveTo(0, -r * 0.8); ctx.lineTo(0, r * 0.8); ctx.stroke();
+        chalkMark(h.good ? -r * 0.45 : r * 0.45, -r * 0.4, r * 0.35, r * 0.14);
+        break;
+      }
+      case 'macro': {
+        // huge palm-able blob with a glossy top
+        shadow(r * 1.02, r * 0.86, 0.1, 0.16);
+        const blob = k => {
+          ctx.beginPath();
+          h.shape.forEach((f, i) => {
+            const a = (i / h.shape.length) * Math.PI * 2;
+            ctx.lineTo(Math.cos(a) * r * f * k, Math.sin(a) * r * f * k * 0.8);
+          });
+          ctx.closePath();
+        };
+        ctx.fillStyle = def.shade;
+        blob(1); ctx.fill();
+        const gr = ctx.createRadialGradient(-r * 0.3, -r * 0.35, r * 0.05, 0, 0, r);
+        gr.addColorStop(0, '#6b7380');
+        gr.addColorStop(0.5, def.color);
+        gr.addColorStop(1, def.shade);
+        ctx.fillStyle = gr;
+        blob(0.92); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 1.5;
+        blob(1); ctx.stroke();
+        chalkMark(0, -r * 0.45, r * 0.5, r * 0.16);
         break;
       }
       case 'undercling': {
@@ -2600,6 +2796,7 @@
     if (h === climber.hold && state === 'play') {
       let left = -1;
       if (h.type === 'sloper') left = 1 - h.grip / HOLD_TYPES.sloper.slipAt;
+      if (h.type === 'dualtex' && !h.good) left = 1 - h.grip / HOLD_TYPES.dualtex.slipAt;
       if (h.type === 'crumble') left = 1 - h.wear;
       if (left >= 0) {
         const rr = Math.max(r * 1.6, 18);
@@ -2888,6 +3085,7 @@
     drawWall();
     drawReach();
     const idle = state === 'play' && !climber.move && !climber.dyno && !press.charging;
+    for (const h of holds) if (h.tape != null && !h.broken && h.type !== 'ledge') drawTape(h);
     for (const h of holds) {
       const reachable = idle && h.type !== 'foot' && h !== climber.hold && canReach(h);
       if (h.type === 'ledge') drawLedge(h, reachable || (idle && h === climber.hold));
