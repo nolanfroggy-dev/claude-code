@@ -360,7 +360,7 @@
   };
 
   let holds = [];
-  const gen = { y: 0, x: 0, n: 0 };
+  const gen = { y: 0, x: 0, n: 0, sinceDyno: 0, last: null };
 
   const gradeAt = y => Math.max(0, Math.floor((y - START_Y) / GRADE_EVERY));
 
@@ -423,14 +423,28 @@
       let nx = gen.x + rand(-d.dx, d.dx);
       if (nx < X_MIN || nx > X_MAX) nx = 2 * gen.x - nx;         // bounce off the edges
       nx = clamp(nx, X_MIN, X_MAX);
-      // keep every route move within static reach
-      const len = Math.hypot(nx - gen.x, dy), maxLen = REACH * 0.9;
-      if (len > maxLen) { const k = maxLen / len; nx = gen.x + (nx - gen.x) * k; dy *= k; }
+      // Now and then the route needs a dyno: a gap beyond static reach.
+      const dynoChance = gen.y > START_Y + 12 ? Math.min(0.08 + g * 0.05, 0.3) : 0;
+      const isDyno = gen.sinceDyno > 5 && Math.random() < dynoChance;
+      if (isDyno) {
+        dy = rand(2.75, 3.3 + Math.min(g * 0.1, 0.4));
+        nx = clamp(gen.x + rand(-0.9, 0.9), X_MIN, X_MAX);
+        // launch from something you can hang on while charging
+        const l = gen.last;
+        if (l && (l.type === 'sloper' || l.type === 'crumble')) { l.type = 'jug'; l.r = HOLD_TYPES.jug.r * d.scale; }
+        gen.sinceDyno = 0;
+      } else {
+        // keep every other route move within static reach
+        const len = Math.hypot(nx - gen.x, dy), maxLen = REACH * 0.9;
+        if (len > maxLen) { const k = maxLen / len; nx = gen.x + (nx - gen.x) * k; dy *= k; }
+        gen.sinceDyno++;
+      }
       const ny = gen.y + dy;
 
       // clear anything the route hold would overlap
       holds = holds.filter(h => h.route || dist(h.x, h.y, nx, ny) > 0.8);
-      addHold(nx, ny, gen.n < 4 ? 'jug' : pickType(g), d.scale, true);
+      const type = gen.n < 4 ? 'jug' : isDyno ? (Math.random() < 0.7 ? 'jug' : 'pinch') : pickType(g);
+      gen.last = addHold(nx, ny, type, d.scale, true);
 
       // footchip between the last two route holds
       if (Math.random() < 0.8) {
@@ -476,6 +490,8 @@
       hip, hipV: { x: 0, y: 0 }, hipT: vcopy(hip),
       k: 160, damp: 22,                       // hip spring
       move: null,                             // active reach
+      dyno: null,                             // active dyno
+      swingT: 0,
       footMoves: [null, null],
       restT: 0,                               // time resting still on a hold
       shake: null, shakeCd: 1.2, nextShakeHand: 1,
@@ -574,10 +590,11 @@
         c.hold.chalk = Math.min(1, c.hold.chalk + 0.6);
         onGrab(c.hold);
       }
-    } else if (c.pose === 'hang' && c.hold) {
+    } else if (c.pose === 'hang' && c.hold && !c.dyno && !c.coil) {
       // --- Resting on a hold: settle, breathe, shake out a hand ---
       c.restT += dt;
-      c.k = 120; c.damp = 16;
+      if (c.swingT > 0) c.swingT -= dt;
+      else { c.k = 120; c.damp = 16; }
       const grips = gripPoints(c.hold);
       c.hipT = hangTarget(c, grips);
       c.shakeCd -= dt;
@@ -721,11 +738,12 @@
   let height = 0, time = 0, deadAt = 0;
   let missFx = null;
   let fallReason = '';
+  const stats = { holds: 0, dynos: 0 };
 
   function reset() {
     holds = [];
     gen.y = START_Y; gen.x = WALL_W / 2;
-    gen.n = 0;
+    gen.n = 0; gen.sinceDyno = 0; gen.last = null;
     const first = addHold(WALL_W / 2, START_Y, 'jug', 1.1, true);
     addHold(WALL_W / 2 - 0.35, START_Y - 1.05, 'foot');
     addHold(WALL_W / 2 + 0.4, START_Y - 1.0, 'foot');
@@ -736,11 +754,16 @@
     chalk.uses = CHALK.max; chalk.t = 0;
     state = 'play';
     missFx = null;
+    floats = [];
+    stats.holds = 0; stats.dynos = 0;
+    timeScale = 1; slowmo = 0;
+    press.active = false; press.charging = false;
     updateHud(true);
   }
 
   function onGrab(h) {
     h.grip = 0;              // slopers restart their slip timer each grab
+    stats.holds++;
   }
 
   function handsMid() { return mid(climber.handT[0], climber.handT[1]); }
@@ -762,20 +785,152 @@
   }
 
   function onTap(px, py) {
-    if (state === 'dead') {
-      if (performance.now() - deadAt > 600) reset();
-      return;
-    }
-    if (state !== 'play' || climber.move) return;
+    if (state !== 'play' || climber.move || climber.dyno) return;
     const p = toWorld(px, py);
     const h = holdAt(p);
     if (!h || h === climber.hold) { missFx = { x: p.x, y: p.y, t: 0 }; return; }
     if (canReach(h)) {
       climber.pump = Math.min(100, climber.pump + PUMP.moveCost);
       startReach(climber, h);
+    } else {
+      missFx = { x: h.x, y: h.y, t: 0 };
+      floatText('TOO FAR · HOLD TO DYNO', h.x, h.y + 0.6, '#ffd166', 20);
     }
-    else startFall('TOO FAR');
   }
+
+  // ---------- Dynos ----------
+  // Press and hold to charge, aim with your finger, release to jump.
+  // Mid-air, tap when your hands pass a hold to catch it.
+  const DYNO = {
+    chargeDelay: 0.22,   // seconds before a press becomes a charge
+    chargeTime: 0.9,     // seconds to full power
+    vMin: 5.5, vMax: 13.5,
+    load: 0.1,           // crouch before take-off
+    pump: 8,
+    catchR: 0.55,        // hands-to-hold catch radius (plus hold size)
+    buffer: 0.12,        // an early tap still counts this long
+  };
+  const press = { active: false, id: null, x: 0, y: 0, t0: 0, charging: false, power: 0 };
+
+  function canCharge() {
+    return state === 'play' && climber.hold && !climber.move && !climber.dyno;
+  }
+
+  function dynoAim() {
+    const hm = handsMid();
+    const f = toWorld(press.x, press.y);
+    let ax = f.x - hm.x, ay = f.y - hm.y;
+    const d = Math.hypot(ax, ay) || 1;
+    ax /= d; ay /= d;
+    if (ay < 0.25) { ay = 0.25; const n = Math.hypot(ax, ay); ax /= n; ay /= n; }
+    return { x: ax, y: ay };
+  }
+
+  function dynoVelocity() {
+    const a = dynoAim(), v = lerp(DYNO.vMin, DYNO.vMax, press.power);
+    return { x: a.x * v, y: a.y * v };
+  }
+
+  // Sample the jump arc for the preview.
+  function dynoArc(v) {
+    const hm = handsMid(), pts = [];
+    let x = hm.x, y = hm.y, vx = v.x, vy = v.y;
+    for (let i = 0; i < 40; i++) {
+      const dt = 0.035;
+      vy -= GRAVITY * dt; x += vx * dt; y += vy * dt;
+      if (y < hm.y - 2 || x < 0 || x > WALL_W) break;
+      pts.push({ x, y });
+    }
+    return pts;
+  }
+
+  function catchRange(h, p) {
+    return dist(h.x, h.y, p.x, p.y) < DYNO.catchR + h.r * 0.6;
+  }
+
+  function launchDyno() {
+    const c = climber;
+    const v = dynoVelocity();
+    c.dyno = { phase: 'load', t: 0, v, from: c.hold, p: handsMid(), launchY: handsMid().y, buffer: 0 };
+    c.pump = Math.min(100, c.pump + DYNO.pump);
+    c.shake = null;
+    c.dip = null;
+    press.charging = false;
+    press.power = 0;
+  }
+
+  function catchableHold() {
+    const d = climber.dyno;
+    let best = null, bestD = Infinity;
+    for (const h of holds) {
+      if (h.broken || h.type === 'foot' || h === d.from) continue;
+      const dd = dist(h.x, h.y, d.p.x, d.p.y);
+      if (catchRange(h, d.p) && dd < bestD) { bestD = dd; best = h; }
+    }
+    return best;
+  }
+
+  function dynoTap() {
+    const d = climber.dyno;
+    if (!d || d.phase !== 'fly' || d.buffer > 0) return;
+    d.buffer = DYNO.buffer;
+  }
+
+  function updateDyno(dt) {
+    const c = climber, d = c.dyno;
+    if (!d) return;
+    d.t += dt;
+    if (d.phase === 'load') {
+      const hm = handsMid();
+      c.hipT = { x: hm.x - d.v.x * 0.03, y: hm.y - HANG - 0.3 };
+      c.k = 300; c.damp = 30;
+      if (d.t >= DYNO.load) {
+        d.phase = 'fly';
+        d.t = 0;
+        c.hold = null;
+        onDynoLaunch();
+      }
+      return;
+    }
+    // ballistic flight of the hands; the body trails on a stiff spring
+    d.v.y -= GRAVITY * dt;
+    d.p.x += d.v.x * dt;
+    d.p.y += d.v.y * dt;
+    c.handT = [{ x: d.p.x - 0.09, y: d.p.y }, { x: d.p.x + 0.09, y: d.p.y }];
+    c.hipT = { x: d.p.x - d.v.x * 0.04, y: d.p.y - HANG - 0.05 };
+    c.k = 320; c.damp = 26;
+    c.footMoves = [null, null];
+    c.footT = [
+      { x: c.hip.x - 0.2 + Math.sin(time * 9) * 0.05, y: c.hip.y - 0.82 },
+      { x: c.hip.x + 0.2 + Math.sin(time * 9 + 2) * 0.05, y: c.hip.y - 0.82 },
+    ];
+
+    const h = catchableHold();
+    if (d.buffer > 0) {
+      if (h) { catchHold(h); return; }
+      d.buffer -= dt;
+      if (d.buffer <= 0) { startFall('MISSED THE CATCH'); return; }
+    }
+    if ((d.v.y < 0 && d.p.y < d.launchY - 1.2) || d.t > 2.5) startFall('MISSED THE DYNO');
+  }
+
+  function catchHold(h) {
+    const c = climber;
+    c.dyno = null;
+    c.hold = h;
+    c.handT = gripPoints(h);
+    c.hipT = hangTarget(c, c.handT);
+    c.k = 70; c.damp = 7;            // loose spring: the body swings in
+    c.swingT = 0.6;
+    c.restT = 0;
+    placeFeet(c, false, c.hipT);
+    h.chalk = Math.min(1, h.chalk + 0.6);
+    stats.dynos++;
+    onGrab(h, true);
+    floatText(['NICE CATCH!', 'STUCK IT!', 'DEADPOINT!'][Math.floor(Math.random() * 3)], h.x, h.y + 0.7, '#7fe0d4', 24);
+  }
+
+  function onDynoLaunch() { /* sound & shake hook */ }
 
   // Hold mechanics while hanging: slopers slip, crumbling holds break.
   function updateHoldTimers(dt) {
@@ -830,21 +985,77 @@
   }
   function onChalk() { /* particles & sound hook */ }
 
+  // ---------- Falling ----------
+  // A short slow-motion beat, then the climber tumbles off the bottom.
+  let fallT = 0;
   function startFall(reason) {
     fallReason = reason || '';
     state = 'falling';
+    fallT = 0;
+    slowmo = 0.75;
     const c = climber;
+    const hm = c.dyno ? c.dyno.p : handsMid();
     c.pose = 'fall';
     c.hold = null;
     c.move = null;
-    c.hipV = { x: rand(-1.2, 1.2), y: 2.5 };
-    c.rotV = rand(-5, 5);
+    c.dyno = null;
+    c.dip = null;
+    c.shake = null;
+    c.hipV = { x: c.hipV.x * 0.5 + rand(-1, 1), y: Math.max(c.hipV.y * 0.4, 0) + 3.2 };
+    c.rotV = (Math.random() < 0.5 ? -1 : 1) * rand(4, 7);
+    press.active = false;
+    press.charging = false;
+    floatText(fallReason, hm.x, hm.y + 0.4, '#ff5a44', 30);
+    onFall(reason);
+  }
+  function onFall() { /* sound, shake & vibration hook */ }
+
+  // ---------- Floating text ----------
+  let floats = [];
+  function floatText(text, x, y, color, size) {
+    floats.push({ text, x, y, color, size, t: 0, life: 1.1 });
   }
 
+  // ---------- Pointer input ----------
   canvas.addEventListener('pointerdown', e => {
     e.preventDefault();
-    onTap(e.clientX, e.clientY);
+    if (state === 'dead') {
+      if (performance.now() - deadAt > 600) reset();
+      return;
+    }
+    if (state !== 'play') return;
+    if (climber.dyno) { dynoTap(); return; }
+    if (press.active) return;
+    Object.assign(press, {
+      active: true, id: e.pointerId, x: e.clientX, y: e.clientY,
+      t0: performance.now(), charging: false, power: 0,
+    });
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
   });
+  canvas.addEventListener('pointermove', e => {
+    if (!press.active || e.pointerId !== press.id) return;
+    press.x = e.clientX; press.y = e.clientY;
+  });
+  canvas.addEventListener('pointerup', e => {
+    if (!press.active || e.pointerId !== press.id) return;
+    press.active = false;
+    if (press.charging) {
+      if (canCharge()) launchDyno();
+      press.charging = false;
+    } else onTap(e.clientX, e.clientY);
+  });
+  canvas.addEventListener('pointercancel', () => { press.active = false; press.charging = false; });
+
+  function updatePress() {
+    if (!press.active) return;
+    const held = (performance.now() - press.t0) / 1000;
+    if (!press.charging && held > DYNO.chargeDelay && canCharge()) press.charging = true;
+    if (press.charging) {
+      if (!canCharge()) { press.charging = false; press.active = false; return; }
+      press.power = clamp((held - DYNO.chargeDelay) / DYNO.chargeTime, 0, 1);
+    }
+  }
+
   // Block pinch-zoom, double-tap zoom and scroll gestures.
   ['touchstart', 'touchmove', 'gesturestart', 'dblclick'].forEach(ev =>
     document.addEventListener(ev, e => { if (e.target === canvas || ev !== 'touchstart') e.preventDefault(); }, { passive: false }));
@@ -853,28 +1064,59 @@
   // =====================================================================
   // 8. UPDATE
   // =====================================================================
-  function update(dt) {
-    time += dt;
-    if (missFx) { missFx.t += dt; if (missFx.t > 0.35) missFx = null; }
+  let timeScale = 1, slowmo = 0;
 
+  function update(realDt) {
+    // time scale: slow-mo on falls and near a dyno catch
+    let target = 1;
+    if (slowmo > 0) { slowmo -= realDt; target = 0.22; }
+    else if (climber.dyno && climber.dyno.phase === 'fly') {
+      const d = climber.dyno;
+      const near = holds.some(h => !h.broken && h.type !== 'foot' && h !== d.from && dist(h.x, h.y, d.p.x, d.p.y) < 1.3);
+      if (near) target = 0.45;
+    }
+    timeScale += (target - timeScale) * Math.min(1, realDt * 12);
+    const dt = realDt * timeScale;
+
+    time += dt;
+    if (missFx) { missFx.t += realDt; if (missFx.t > 0.35) missFx = null; }
+    floats = floats.filter(f => (f.t += realDt) < f.life);
+
+    updatePress();
     updateChalk(dt);
-    if (state === 'play') { updateHoldTimers(dt); updatePump(dt); }
+    if (state === 'play') { updateHoldTimers(dt); updatePump(dt); updateDyno(dt); }
+    climber.coil = press.charging && !!climber.hold;
+    if (climber.coil) {
+      // crouch and coil opposite the aim while charging
+      const a = dynoAim(), hm = handsMid();
+      climber.hipT = { x: hm.x - a.x * 0.25 * press.power, y: hm.y - HANG - 0.3 * press.power };
+      climber.shake = null;
+    }
     updateClimber(climber, dt, time);
 
     if (state === 'play') {
-      const h = Math.max(height, Math.floor(climber.hip.y + HANG - START_Y));
-      if (h > height) { height = h; updateHud(); }
-      const target = climber.hip.y - (H * 0.36) / S;
+      if (climber.hold) {
+        const h = Math.max(height, Math.floor(climber.hold.y - START_Y));
+        if (h > height) { height = h; updateHud(); }
+      }
+      const target = Math.max(climber.hip.y, climber.dyno ? climber.dyno.p.y - 1.4 : -Infinity) - (H * 0.36) / S;
       cam.y += (target - cam.y) * Math.min(1, dt * 4);
       generate(cam.y + H / S + 10);
       holds = holds.filter(h => (h.y > cam.y - 4 && !(h.broken && h !== climber.hold)) || h === climber.hold);
     } else if (state === 'falling') {
-      if (sy(climber.hip.y + 2) > H + 40) {
+      fallT += realDt;
+      if (fallT < 0.9) {
+        const target = climber.hip.y - (H * 0.45) / S;
+        cam.y += (target - cam.y) * Math.min(1, dt * 3);
+      }
+      if (fallT > 2.4 || (fallT > 1 && sy(climber.hip.y + 2) > H + 40)) {
         state = 'dead';
         deadAt = performance.now();
+        onGameOver();
       }
     }
   }
+  function onGameOver() { /* screens hook */ }
 
   // =====================================================================
   // 9. DRAW: WORLD
@@ -1079,7 +1321,7 @@
   }
 
   function drawReach() {
-    if (state !== 'play' || climber.move) return;
+    if (state !== 'play' || climber.move || climber.dyno || press.charging) return;
     const hm = handsMid();
     ctx.save();
     ctx.strokeStyle = COL.reach;
@@ -1244,6 +1486,79 @@
     ctx.fillText('Tap anywhere to climb again', W / 2, H * 0.4 + 50);
   }
 
+  // Dotted jump arc + power ring while charging a dyno.
+  function drawDynoPreview() {
+    if (!press.charging) return;
+    const v = dynoVelocity();
+    const pts = dynoArc(v);
+    const col = press.power < 0.5 ? '127,224,212' : press.power < 0.9 ? '255,209,102' : '255,138,31';
+    // holds the arc passes: likely catch targets
+    for (const h of holds) {
+      if (h.broken || h.type === 'foot' || h === climber.hold) continue;
+      if (pts.some(p => catchRange(h, p))) {
+        ctx.strokeStyle = `rgba(${col},0.95)`;
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(sx(h.x), sy(h.y), Math.max(h.r * S * 1.6, 18), 0, Math.PI * 2); ctx.stroke();
+      }
+    }
+    pts.forEach((p, i) => {
+      if (i % 2) return;
+      const k = 1 - i / pts.length;
+      ctx.fillStyle = `rgba(${col},${0.35 + 0.6 * k})`;
+      ctx.beginPath(); ctx.arc(sx(p.x), sy(p.y), 2 + 3.5 * k, 0, Math.PI * 2); ctx.fill();
+    });
+    // power ring under the finger
+    const r = 34;
+    ctx.lineCap = 'round';
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath(); ctx.arc(press.x, press.y, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = `rgb(${col})`;
+    ctx.beginPath(); ctx.arc(press.x, press.y, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0.02, press.power)); ctx.stroke();
+    ctx.fillStyle = '#fbf7ef';
+    ctx.font = '800 15px "Barlow Condensed", system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(press.power >= 1 ? 'MAX' : 'DYNO', press.x, press.y);
+  }
+
+  // Mid-air: holds in catch range pulse, telling you when to tap.
+  function drawCatchCue() {
+    const d = climber.dyno;
+    if (!d || d.phase !== 'fly') return;
+    const h = catchableHold();
+    if (!h) return;
+    const pulse = 0.5 + 0.5 * Math.sin(time * 30);
+    ctx.strokeStyle = `rgba(255,209,102,${0.6 + 0.4 * pulse})`;
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(sx(h.x), sy(h.y), Math.max(h.r * S * 1.7, 20) + pulse * 4, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = '#ffd166';
+    ctx.font = '800 22px "Barlow Condensed", system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('TAP!', sx(h.x), sy(h.y) - Math.max(h.r * S * 1.7, 20) - 16);
+  }
+
+  function drawFloats() {
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    for (const f of floats) {
+      const k = f.t / f.life;
+      const scale = k < 0.15 ? 0.6 + (k / 0.15) * 0.5 : 1.1 - Math.min(0.1, (k - 0.15));
+      ctx.globalAlpha = k > 0.7 ? (1 - k) / 0.3 : 1;
+      ctx.font = `800 ${Math.round(f.size * scale)}px "Barlow Condensed", system-ui, sans-serif`;
+      const half = ctx.measureText(f.text).width / 2 + 12;
+      const x = clamp(sx(f.x), half, Math.max(half, W - half)), y = sy(f.y) - k * 40;
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = 'rgba(10,14,20,0.8)';
+      ctx.strokeText(f.text, x, y);
+      ctx.fillStyle = f.color;
+      ctx.fillText(f.text, x, y);
+    }
+    ctx.globalAlpha = 1;
+  }
+
   // Screen edges pulse red as the forearms pump out.
   function drawPumpVignette() {
     const p = climber.pump;
@@ -1268,7 +1583,7 @@
     drawSky();
     drawWall();
     drawReach();
-    const idle = state === 'play' && !climber.move;
+    const idle = state === 'play' && !climber.move && !climber.dyno && !press.charging;
     for (const h of holds) drawHold(h, idle && h !== climber.hold && h.type !== 'foot' && canReach(h));
     if (missFx) {
       ctx.strokeStyle = COL.danger;
@@ -1279,7 +1594,10 @@
       ctx.stroke();
       ctx.globalAlpha = 1;
     }
+    drawDynoPreview();
+    drawCatchCue();
     drawClimber(climber);
+    drawFloats();
     drawPumpVignette();
     if (state === 'dead') drawDead();
   }
@@ -1346,7 +1664,7 @@
 
   // Test hook (only with #debug in the URL)
   if (location.hash === '#debug') {
-    window.__crux = { get climber() { return climber; }, get holds() { return holds; }, get state() { return state; }, sx, sy, canReach };
+    window.__crux = { get climber() { return climber; }, get holds() { return holds; }, get state() { return state; }, get press() { return press; }, sx, sy, canReach, toWorld, catchableHold: () => climber.dyno && climber.dyno.phase === 'fly' ? catchableHold() : null };
   }
 
   resize();
