@@ -73,6 +73,84 @@
     color: var(--muted);
     font-variant-numeric: tabular-nums;
   }
+  .meters {
+    flex: 1;
+    min-width: 0;
+    background: var(--panel);
+    border-radius: 14px;
+    padding: 8px 12px 10px;
+    display: grid;
+    gap: 5px;
+  }
+  .meter-label {
+    display: flex;
+    justify-content: space-between;
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+  }
+  .meter-label b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .pumpbar {
+    height: 12px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.14);
+    overflow: hidden;
+  }
+  .pumpbar div {
+    height: 100%;
+    width: 0%;
+    border-radius: 6px;
+    background: var(--good);
+    transition: background-color 0.3s;
+  }
+  .pumpbar.hot div { animation: flash 0.5s infinite alternate; }
+  @keyframes flash { to { opacity: 0.55; } }
+
+  /* ================= Chalk button ================= */
+  .chalk-btn {
+    position: fixed;
+    right: 16px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
+    width: 80px;
+    height: 80px;
+    border: 0;
+    border-radius: 50%;
+    padding: 5px;
+    background: conic-gradient(var(--accent) calc(var(--p, 1) * 1turn), rgba(255, 255, 255, 0.16) 0);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .chalk-btn .face {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: #1d2733;
+    display: grid;
+    place-items: center;
+    transition: transform 0.12s;
+  }
+  .chalk-btn:active .face { transform: scale(0.92); }
+  .chalk-btn:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+  .chalk-btn svg { width: 44px; height: 44px; }
+  .chalk-btn .count {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    min-width: 28px;
+    height: 28px;
+    border-radius: 14px;
+    background: var(--ink);
+    color: #1d2733;
+    font-weight: 800;
+    font-size: 18px;
+    line-height: 28px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .chalk-btn.empty .face { opacity: 0.45; }
+  .chalk-btn.empty .count { background: var(--danger); color: var(--ink); }
   .pop { animation: pop 0.28s ease-out; }
   @keyframes pop {
     0% { transform: scale(1); }
@@ -92,7 +170,25 @@
     <div class="height" id="hudHeight">0<small>m</small></div>
     <div class="best" id="hudBest">BEST 0 m</div>
   </div>
+  <div class="meters">
+    <div class="meter-label"><span>PUMP</span><b id="pumpText">0%</b></div>
+    <div class="pumpbar" id="pumpBar"><div id="pumpFill"></div></div>
+  </div>
 </div>
+
+<button class="chalk-btn" id="chalkBtn" aria-label="Chalk up to recover from pump">
+  <span class="face">
+    <svg viewBox="0 0 48 48" aria-hidden="true">
+      <circle cx="17" cy="11" r="5" fill="#fff" opacity="0.85"/>
+      <circle cx="26" cy="8" r="4" fill="#fff" opacity="0.6"/>
+      <circle cx="32" cy="12" r="3.5" fill="#fff" opacity="0.75"/>
+      <rect x="10" y="15" width="28" height="6" rx="2" fill="#34343e"/>
+      <path d="M11 21h26l-2 17a6 6 0 0 1-6 5H19a6 6 0 0 1-6-5z" fill="#f1eadb"/>
+      <path d="M15 27h18" stroke="#d9cfb9" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+  </span>
+  <span class="count" id="chalkCount">3</span>
+</button>
 
 <script>
 (() => {
@@ -116,6 +212,15 @@
   const ARM = BODY.upper + BODY.fore;
   const LEG = BODY.thigh + BODY.shin;
   const HANG = 1.0;                          // hip sits this far below the hands
+
+  const PUMP = {
+    moveCost: 2.5,        // added per static move
+    jugRest: -6,          // per second once settled on a jug
+    jugSettle: 1.0,       // seconds before a jug becomes a rest
+    gradeMult: 0.12,      // extra drain per grade
+    hot: 65,              // edges pulse red above this
+  };
+  const CHALK = { max: 3, recharge: 14, restore: 30 };
 
   const COL = {
     skin: '#e2a47f', skinShade: '#b9785a',
@@ -488,6 +593,8 @@
       }
     }
 
+    if (c.dip) { c.dip.t += dt; if (c.dip.t >= c.dip.dur) c.dip = null; }
+
     // --- Feet stepping ---
     for (let s = 0; s < 2; s++) {
       const fm = c.footMoves[s];
@@ -564,7 +671,11 @@
         };
       } else {
         t = vcopy(c.handT[i]);
-        if (c.shake && c.shake.hand === i) {
+        if (c.dip && c.dip.hand === i) {
+          const k = c.dip.t / c.dip.dur, w = Math.sin(Math.min(1, k) * Math.PI);
+          const bag = { x: hip.x - dir.x * 0.05 + (i ? 0.04 : -0.04), y: hip.y - dir.y * 0.05 };
+          t = { x: lerp(t.x, bag.x, w), y: lerp(t.y, bag.y, w) };
+        } else if (c.shake && c.shake.hand === i) {
           // drop the hand to the side and flick it
           const k = c.shake.t, w = Math.min(1, k / 0.25, (c.shake.dur - k) / 0.25);
           const down = { x: sh[i].x + s * 0.16 + Math.sin(time * 26) * 0.06, y: sh[i].y - ARM * 0.9 };
@@ -622,6 +733,7 @@
     climber = makeClimber(first);
     cam.y = START_Y - (H * 0.4) / S;
     height = 0;
+    chalk.uses = CHALK.max; chalk.t = 0;
     state = 'play';
     missFx = null;
     updateHud(true);
@@ -658,7 +770,10 @@
     const p = toWorld(px, py);
     const h = holdAt(p);
     if (!h || h === climber.hold) { missFx = { x: p.x, y: p.y, t: 0 }; return; }
-    if (canReach(h)) startReach(climber, h);
+    if (canReach(h)) {
+      climber.pump = Math.min(100, climber.pump + PUMP.moveCost);
+      startReach(climber, h);
+    }
     else startFall('TOO FAR');
   }
 
@@ -681,6 +796,39 @@
       if (h.grip >= HOLD_TYPES.sloper.slipAt) startFall('SLIPPED');
     }
   }
+
+  // Forearm pump: every hold drains at its own rate; settled jugs recover.
+  function updatePump(dt) {
+    const c = climber, h = c.hold;
+    if (!h || c.move) return;
+    let rate = HOLD_TYPES[h.type].pump * (1 + PUMP.gradeMult * gradeAt(h.y));
+    if (h.type === 'jug' && h.grip > PUMP.jugSettle) rate = PUMP.jugRest;
+    c.pump = clamp(c.pump + rate * dt, 0, 100);
+    if (c.pump >= 100) startFall('PUMPED OUT');
+  }
+
+  // Chalk: limited uses that recharge over time.
+  const chalk = { uses: CHALK.max, t: 0 };
+  function updateChalk(dt) {
+    if (chalk.uses < CHALK.max) {
+      chalk.t += dt / CHALK.recharge;
+      if (chalk.t >= 1) { chalk.t = 0; chalk.uses++; }
+    } else chalk.t = 0;
+  }
+
+  function useChalk() {
+    const c = climber;
+    if (state !== 'play' || !c.hold || c.move || chalk.uses <= 0) return false;
+    chalk.uses--;
+    c.pump = Math.max(0, c.pump - CHALK.restore);
+    c.hold.chalk = 1;
+    if (c.hold.type === 'sloper') c.hold.grip = 0;   // fresh chalk resets a sloper
+    c.dip = { hand: c.nextShakeHand, t: 0, dur: 0.55 };
+    c.shake = null;
+    onChalk();
+    return true;
+  }
+  function onChalk() { /* particles & sound hook */ }
 
   function startFall(reason) {
     fallReason = reason || '';
@@ -709,7 +857,8 @@
     time += dt;
     if (missFx) { missFx.t += dt; if (missFx.t > 0.35) missFx = null; }
 
-    if (state === 'play') updateHoldTimers(dt);
+    updateChalk(dt);
+    if (state === 'play') { updateHoldTimers(dt); updatePump(dt); }
     updateClimber(climber, dt, time);
 
     if (state === 'play') {
@@ -1095,6 +1244,25 @@
     ctx.fillText('Tap anywhere to climb again', W / 2, H * 0.4 + 50);
   }
 
+  // Screen edges pulse red as the forearms pump out.
+  function drawPumpVignette() {
+    const p = climber.pump;
+    if (p < PUMP.hot || state !== 'play') return;
+    const k = (p - PUMP.hot) / (100 - PUMP.hot);
+    const pulse = 0.55 + 0.45 * Math.sin(time * (5 + k * 7));
+    // elliptical so it hugs all four edges on a tall screen
+    ctx.save();
+    ctx.translate(W / 2, H / 2);
+    ctx.scale(W / 2, H / 2);
+    const g = ctx.createRadialGradient(0, 0, 0.72, 0, 0, 1.3);
+    g.addColorStop(0, 'rgba(255,40,30,0)');
+    g.addColorStop(0.4, `rgba(255,40,30,${(0.1 + k * 0.2) * pulse})`);
+    g.addColorStop(1, `rgba(255,40,30,${(0.3 + k * 0.35) * pulse})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(-1, -1, 2, 2);
+    ctx.restore();
+  }
+
   function draw() {
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     drawSky();
@@ -1112,12 +1280,44 @@
       ctx.globalAlpha = 1;
     }
     drawClimber(climber);
+    drawPumpVignette();
     if (state === 'dead') drawDead();
   }
 
   // =====================================================================
   // 12. HUD
   // =====================================================================
+  const pumpFill = document.getElementById('pumpFill');
+  const pumpBar = document.getElementById('pumpBar');
+  const pumpText = document.getElementById('pumpText');
+  const chalkBtn = document.getElementById('chalkBtn');
+  const chalkCount = document.getElementById('chalkCount');
+  let shownPump = -1, shownChalk = '';
+
+  function updateMeters() {
+    const p = Math.round(climber.pump);
+    if (p !== shownPump) {
+      shownPump = p;
+      pumpFill.style.width = p + '%';
+      pumpFill.style.backgroundColor = p < 45 ? 'var(--good)' : p < PUMP.hot ? 'var(--accent)' : 'var(--danger)';
+      pumpText.textContent = p + '%';
+      pumpBar.classList.toggle('hot', p >= 85);
+    }
+    const key = chalk.uses + ':' + chalk.t.toFixed(2);
+    if (key !== shownChalk) {
+      shownChalk = key;
+      chalkCount.textContent = chalk.uses;
+      chalkBtn.style.setProperty('--p', chalk.uses >= CHALK.max ? 1 : chalk.t.toFixed(3));
+      chalkBtn.classList.toggle('empty', chalk.uses === 0);
+    }
+  }
+
+  chalkBtn.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    useChalk();
+  });
+
   const hudHeight = document.getElementById('hudHeight');
   const hudBest = document.getElementById('hudBest');
   function updateHud(silent) {
@@ -1140,6 +1340,7 @@
     last = now;
     update(dt);
     draw();
+    updateMeters();
     requestAnimationFrame(frame);
   }
 
