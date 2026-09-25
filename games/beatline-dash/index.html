@@ -578,13 +578,14 @@
       },
       side(g, x, y0, y1) {
         // a ragged cliff face with a few stones poking out, instead of a ruler-straight edge
-        const pts = [[x, y0]];
-        for (let y = y0 + 10, i = 0; y < y1; y += 12, i++) pts.push([x + (hash(Math.round(x) * 0.37 + i * 7.1) - 0.5) * 7, y]);
+        // shape keyed to the edge's world position, so it stays put while the camera scrolls
+        const wx = Math.round((x + camX) / 4), pts = [[x, y0]];
+        for (let y = y0 + 10, i = 0; y < y1; y += 12, i++) pts.push([x + (hash(wx * 0.37 + i * 7.1) - 0.5) * 7, y]);
         pts.push([x, y1]);
         g.beginPath(); pts.forEach(([px, py], i) => (i ? g.lineTo(px, py) : g.moveTo(px, py)));
-        g.lineTo(x + (pts.length > 2 ? 0 : 0), y1); out(g, 3.5);
+        out(g, 3.5);
         for (let y = y0 + 26, i = 0; y < Math.min(y1, y0 + 260); y += 46, i++) {
-          if (hash(Math.round(x) + i * 3.3) < 0.5) continue;
+          if (hash(wx + i * 3.3) < 0.5) continue;
           g.beginPath(); g.ellipse(x, y, 5, 4, 0, 0, TAU); g.fillStyle = C.rock; g.fill(); out(g, 2);
         }
       },
