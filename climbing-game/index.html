@@ -554,12 +554,8 @@
     helmet: '#ff8a1f', helmetShade: '#c9630a',
     harness: '#f5c531',
     bag: '#f1eadb', bagRim: '#34343e',
-    chalk: '#ffffff',
-    jug: '#ffb238', jugShade: '#c27a12',
     reach: '#7fe0d4',
     danger: '#ff5a44',
-    rock: '#39414a', rockLight: '#4a535d', rockDark: '#2c333b',
-    sky: '#8fc9ea',
   };
 
   // =====================================================================
@@ -623,8 +619,9 @@
   const cam = { y: 0 };
   let wallTile = 256;
 
+  let dprCap = 2;                             // lowered automatically on slow devices
   function resize() {
-    DPR = Math.min(window.devicePixelRatio || 1, 2.5);
+    DPR = Math.min(window.devicePixelRatio || 1, dprCap);
     W = window.innerWidth;
     H = window.innerHeight;
     canvas.width = Math.round(W * DPR);
@@ -2876,9 +2873,24 @@
   // 13. MAIN LOOP
   // =====================================================================
   let last = performance.now();
+  // Adaptive quality: if frames stay slow, render fewer pixels.
+  const perf = { avg: 1 / 60, n: 0 };
+  function watchPerf(rawDt) {
+    if (document.hidden || rawDt > 0.25) return;
+    perf.avg += (rawDt - perf.avg) * 0.05;
+    if (++perf.n > 120 && perf.avg > 1 / 45 && dprCap > 1) {
+      dprCap = Math.max(1, dprCap - 0.5);
+      perf.n = 0;
+      perf.avg = 1 / 60;
+      resize();
+    }
+  }
+
   function frame(now) {
-    const dt = Math.min(0.05, (now - last) / 1000);
+    const raw = (now - last) / 1000;
+    const dt = Math.min(0.05, raw);
     last = now;
+    watchPerf(raw);
     if (!paused) update(dt);
     draw();
     updateMeters();
