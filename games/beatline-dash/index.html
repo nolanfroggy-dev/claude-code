@@ -97,33 +97,37 @@
     align-items: start;
     pointer-events: none;
   }
-  .hud-l { grid-area: lvl; padding: 6px 12px; }
-  .lvl { font-family: var(--display); font-size: calc(20px * var(--dscale)); line-height: 1.15; }
+  /* compact, see-through HUD so it never hides the level */
+  #hud { font-size: 0.85em; }
+  #hud .panel { background: color-mix(in srgb, var(--panel) 45%, transparent); box-shadow: none; border-color: color-mix(in srgb, var(--line) 50%, transparent); }
+  .hud-l { grid-area: lvl; padding: 3px 9px; }
+  .lvl { font-family: var(--display); font-size: calc(15px * var(--dscale)); line-height: 1.15; }
   .env { font-size: 0.72em; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); margin-top: 3px; }
-  .hud-c { grid-area: bar; justify-self: center; width: min(100%, 420px); padding: 8px 12px 6px; box-sizing: border-box; }
-  .bar { height: 10px; background: color-mix(in srgb, var(--ink) 14%, transparent); position: relative; overflow: hidden; border-radius: 99px; }
+  .hud-c { grid-area: bar; justify-self: center; width: min(100%, 320px); padding: 5px 10px 3px; box-sizing: border-box; }
+  .bar { height: 7px; background: color-mix(in srgb, var(--ink) 14%, transparent); position: relative; overflow: hidden; border-radius: 99px; }
   [data-style="forge"] .bar, [data-style="glacier"] .bar { border-radius: 0; }
   #barFill { position: absolute; inset: 0 auto 0 0; width: 0%; background: var(--accent); }
   #barBest { position: absolute; top: 0; bottom: 0; width: 3px; margin-left: -1.5px; background: var(--hot); }
   .next { margin-top: 5px; font-size: 0.85em; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; text-align: center; font-variant-numeric: tabular-nums; }
   #gravChip, #practiceChip { margin-top: 4px; font-size: 0.75em; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; text-align: center; color: var(--hot); }
   .hud-r { grid-area: side; display: flex; justify-content: flex-end; align-items: flex-start; gap: 8px; }
-  .stats { display: grid; gap: 1px; padding: 5px 10px; text-align: right; font-size: 0.7em; font-weight: 700; letter-spacing: 0.12em; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .stats { display: grid; gap: 0; padding: 3px 8px; text-align: right; font-size: 0.7em; font-weight: 700; letter-spacing: 0.12em; color: var(--dim); font-variant-numeric: tabular-nums; }
   .stats b { color: var(--ink); font-size: 1.25em; letter-spacing: 0.02em; margin-left: 6px; }
   .icon-btn {
     pointer-events: auto;
-    width: 40px; height: 40px;
+    width: 32px; height: 32px;
     display: grid; place-items: center;
     padding: 0; cursor: pointer;
     font: inherit;
   }
-  .icon-btn svg { width: 18px; height: 18px; }
+  .icon-btn svg { width: 15px; height: 15px; }
   .icon-btn:focus-visible, .play:focus-visible { outline: 3px solid var(--hot); outline-offset: 3px; }
   .icon-btn[aria-pressed="true"] .cross { display: none; }
   .icon-btn[aria-pressed="false"] .wave { display: none; }
   @media (max-width: 600px) {
     #hud { grid-template-columns: 1fr auto; grid-template-areas: "lvl side" "bar bar"; gap: 8px 10px; }
     .hud-c { width: 100%; }
+    .hud-l { justify-self: start; }
     .stats { display: none; }
   }
 
@@ -210,18 +214,7 @@
   }
   #tip b { font-family: var(--display); font-weight: normal; font-size: calc(22px * var(--dscale)); display: block; color: var(--hot); }
   /* Touch controls: tap anywhere jumps; hold this button (or swipe down) to duck. */
-  #duckBtn {
-    position: fixed;
-    left: calc(16px + env(safe-area-inset-left, 0px));
-    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-    width: 84px; height: 84px; padding: 0;
-    display: grid; place-items: center; align-content: center; gap: 2px;
-    font-family: var(--display); font-size: calc(16px * var(--dscale));
-    cursor: pointer;
-    touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
-  }
-  #duckBtn svg { width: 28px; height: 28px; }
-  #duckBtn.active, #cpBtn:active { background: var(--accent); color: var(--on-accent); transform: translateY(2px); }
+  #cpBtn:active { background: var(--accent); color: var(--on-accent); transform: translateY(2px); }
   #cpBtn {
     position: fixed;
     right: calc(16px + env(safe-area-inset-right, 0px));
@@ -235,7 +228,7 @@
   #touchHint { position: fixed; inset: 0; pointer-events: none; }
   #touchHint span { position: absolute; padding: 8px 14px; font-weight: 800; text-align: center; }
   #touchHint .jump { left: 50%; top: 40%; transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px); }
-  #touchHint .duck { left: calc(16px + env(safe-area-inset-left, 0px)); bottom: calc(112px + env(safe-area-inset-bottom, 0px)); }
+  #touchHint .duck { left: 50%; top: calc(40% + 52px); transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px); }
   @media (prefers-reduced-motion: reduce) {
     @keyframes bannerIn { 0% { opacity: 0; } 10% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
     .play { transition: none; }
@@ -271,14 +264,10 @@
 </div>
 
 <div id="tip" class="panel" hidden></div>
-<button id="duckBtn" class="panel" type="button" aria-label="Duck (hold)" hidden>
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6l7 6 7-6M5 13l7 6 7-6"/></svg>
-  <span>Duck</span>
-</button>
 <button id="cpBtn" class="panel" type="button" aria-label="Place checkpoint (Z)" hidden>Checkpoint</button>
 <div id="touchHint" hidden>
   <span class="panel jump">Tap anywhere to jump</span>
-  <span class="panel duck">Hold to duck &darr;</span>
+  <span class="panel duck">Swipe down to duck &darr;</span>
 </div>
 <div id="banner" hidden><div class="card panel"><div class="big" id="bannerBig">LEVEL 2</div><div class="sub" id="bannerSub">Forge</div><div class="tip" id="bannerTip"></div><div id="bannerStars"></div></div></div>
 
@@ -289,7 +278,7 @@
     <ul class="zones" id="zoneList"></ul>
     <p class="controls">
       <span><kbd>Space</kbd> <kbd>&uarr;</kbd> <kbd>W</kbd>, click or tap anywhere: jump (hold to keep jumping)</span>
-      <span><kbd>&darr;</kbd> <kbd>S</kbd>, or on a touchscreen hold the Duck button or swipe down: duck</span>
+      <span><kbd>&darr;</kbd> <kbd>S</kbd>, or swipe down on a touchscreen: duck</span>
       <span>Tap inside orbs to use them mid-air</span>
       <span>Practice mode: <kbd>Z</kbd> or the Checkpoint button places a checkpoint, <kbd>X</kbd> removes the last one</span>
       <span><kbd>P</kbd> pause</span>
@@ -2279,7 +2268,7 @@
   let zoom = 1, zoomHold = 0;                 // camera zoom: pulls back a little for ship sections and big climbs
   let pop = 0, popCol = "#ffffff";            // brief colour wash behind the obstacles for big moments
   let vL = -40, vR = 840;                     // visible world-drawing x range (wider when zoomed out)
-  // Beat pulse colour per zone, washed over the backdrop and ground (never over obstacles)
+  // Wash colour per zone for big drops (drawn over the backdrop and ground, never over obstacles)
   const PULSE_COL = { meadow: "#fff3b0", forge: "#ff9a3d", reef: "#ffffff", canopy: "#ffe9a8", glacier: "#6fb6ff", void: "#d42a3c" };
   function bigMoment(col, strength = 1) { if (!S.sim) { pop = Math.max(pop, strength); popCol = col; } }
 
@@ -2417,7 +2406,7 @@
   }
 
   const TIPS = {
-    duck: "<b>Duck!</b>Hold &darr; or S. On a touchscreen, hold the Duck button in the bottom-left corner or swipe down.",
+    duck: "<b>Duck!</b>Hold &darr; or S. On a touchscreen, swipe down and keep your finger on the screen.",
     flip: "<b>Gravity flip!</b>You'll run on the ceiling until the next portal. Jumping still works, just upside down.",
     ship: "<b>Ship!</b>Hold to fly up, let go to sink. Touching anything crashes, even the floor.",
     ball: "<b>Ball!</b>Tap to swap between the floor and the ceiling.",
@@ -2832,12 +2821,8 @@
     wTop = zy + (-offY - cs - 20 - zy) / zoom; wBot = zy + (viewH - offY - cs + 20 - zy) / zoom;
     for (const o of S.objs) if (o.t === "roof") { const x = o.x - camX; if (x < vR + 20 && x + o.w > vL - 20) st.roof(g, x, o.w, GROUND - o.ceil, t, o.seed); }
     drawTerrain(g, st, t);
-    // beat pulse and big-moment wash: over backdrop and ground only, so obstacles stay crisp
-    const pulse = beatPulse();
-    for (const [col, a] of [[PULSE_COL[st.id] || "#ffffff", pulse * (st.id === "void" ? 0.05 : 0.08)], [popCol, pop * 0.2]]) {
-      if (a < 0.004) continue;
-      g.save(); g.globalAlpha = a; g.fillStyle = col; g.fillRect(vL - 10, wTop - 10, vR - vL + 20, wBot - wTop + 20); g.restore();
-    }
+    // big-moment wash: over backdrop and ground only, so obstacles stay crisp
+    if (pop > 0.02) { g.save(); g.globalAlpha = pop * 0.2; g.fillStyle = popCol; g.fillRect(vL - 10, wTop - 10, vR - vL + 20, wBot - wTop + 20); g.restore(); }
     const right = vR + 80;
     for (const o of S.objs) {
       const x = o.x - camX;
@@ -2980,8 +2965,6 @@
     if (hudCache.stars !== sk) { hudCache.stars = sk; el("hudStars").innerHTML = starsHTML(st); }
     const flipped = playing && S.flipped && !S.dead;
     if (hudEls.grav.hidden === flipped) hudEls.grav.hidden = !flipped;
-    const showDuck = isTouch && playing && !S.paused;
-    if (duckBtn.hidden === showDuck) duckBtn.hidden = !showDuck;
   }
   function updateBestText() {
     el("bestStart").innerHTML = `Best: Level <b>${bestLevel}</b>`;
@@ -2996,15 +2979,7 @@
     }).join("");
   }
 
-  // Visual beat, in step with the kick drum: the note for block n sounds MUSIC_LEAD
-  // seconds before the player reaches it, one beat is 4 blocks (8 in half time).
   const MUSIC_LEAD = 0.24;
-  function beatPulse() {
-    if (S.mode !== "play" || S.dead || S.paused || reducedMotion) return 0;
-    const sp = speed(), beat = sp > 470 ? 8 : 4;
-    const ph = ((((S.player.x + MUSIC_LEAD * sp) / B) % beat) + beat) % beat / beat;
-    return (1 - ph) ** 4;
-  }
 
   // ---- Audio: a small procedural soundtrack per zone ----------------------
   const audio = (() => {
@@ -3098,23 +3073,21 @@
 
   // ---- Input --------------------------------------------------------------
   // Keyboard: Space/Up/W jump, Down/S duck. A click or tap anywhere on the
-  // playfield jumps. On touchscreens, hold the Duck button or swipe down to duck.
+  // playfield jumps. On touchscreens, swipe down (and hold) to duck.
   let isTouch = window.matchMedia("(pointer: coarse)").matches;
-  const duckBtn = el("duckBtn"), cpBtn = el("cpBtn");
+  const cpBtn = el("cpBtn");
   cpBtn.addEventListener("pointerdown", e => { e.preventDefault(); placeCheckpoint(); });
   cpBtn.addEventListener("contextmenu", e => e.preventDefault());
   const keys = { jump: false, duck: false };
   const pointers = new Map();
   function syncInput(freshJump) {
-    let jump = keys.jump, duck = keys.duck, btn = false;
+    let jump = keys.jump, duck = keys.duck;
     for (const ptr of pointers.values()) {
       if (ptr.role === "jump") jump = true; else duck = true;
-      if (ptr.btn) btn = true;
     }
     if (freshJump) S.buffer = 0.15;
     S.held = jump;
     S.duckInput = duck;
-    duckBtn.classList.toggle("active", btn);
   }
   function clearInput() { keys.jump = keys.duck = false; pointers.clear(); syncInput(false); }
   const JUMP_KEYS = new Set(["Space", "ArrowUp", "KeyW"]);
@@ -3160,16 +3133,8 @@
     if (!ptr || ptr.role !== "jump" || e.pointerType === "mouse") return;
     if (e.clientY - ptr.y0 > 30 && performance.now() - ptr.t0 < 450) { ptr.role = "duck"; syncInput(false); }
   });
-  duckBtn.addEventListener("pointerdown", e => {
-    e.preventDefault();
-    audio.init();
-    if (S.mode !== "play" || S.paused) return;
-    pointers.set(e.pointerId, { role: "duck", btn: true });
-    try { duckBtn.setPointerCapture(e.pointerId); } catch { /* not supported */ }
-    syncInput(false);
-  });
   const endPointer = e => { if (pointers.delete(e.pointerId)) syncInput(false); };
-  for (const node of [canvas, duckBtn]) {
+  for (const node of [canvas]) {
     for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) node.addEventListener(type, endPointer);
     node.addEventListener("contextmenu", e => e.preventDefault());
   }
@@ -3417,7 +3382,7 @@
     }
     requestAnimationFrame(frame);
   }
-  window.__beatline = { S, beatPulse, CHUNKS, STAR_CHUNKS, buildShip, buildBall, buildStar, STYLES, solve, buildChunk, place, setEnv, startGame, spawn, speed, emit, updateCamera, updateDynamics, LEVEL_SECONDS, B, CEIL_H };
+  window.__beatline = { S, CHUNKS, STAR_CHUNKS, buildShip, buildBall, buildStar, STYLES, solve, buildChunk, place, setEnv, startGame, spawn, speed, emit, updateCamera, updateDynamics, LEVEL_SECONDS, B, CEIL_H };
   try { window.claude?.hot?.snapshot?.(() => ({ mode: S.mode, level: S.level, attempts: S.attempts })); } catch { /* no hot reload */ }
   const hot = window.claude?.hot;
   if (hot?.ready) hot.ready(boot); else boot(hot?.data ?? {});
