@@ -2103,6 +2103,86 @@
       c.spike(c.x).run(w(3.5));
     } },
 
+    // ---- Up-and-over areas: climb into a raised section, then come back down ----
+    { lvl: 0, tier: 1, name: "hilltop", build(c, k, w) {
+      const L = stepLen(k);
+      c.run(2).up().run(L).up().run(w(4));
+      c.spike(c.x).run(w(4.5));
+      c.block(c.x, 2, 1).run(2 + w(4));
+      c.down().run(w(3)).down().run(w(4));
+    } },
+    { lvl: 0, tier: 2, name: "hollow hill", build(c, k, w) {
+      // stairs up into a cave in the hilltop, then stairs back down
+      const L = stepLen(k);
+      c.run(2).up().run(L).up().run(L).up().run(w(2.5));
+      c.cave(c.x, w(12.5));
+      c.run(w(3.5)).spike(c.x).run(w(4.5)).spike(c.x).run(w(4.5));
+      c.down().run(w(3)).down().run(w(3)).down().run(w(4));
+    } },
+    { lvl: 0, tier: 3, name: "sky meadow", build(c, k, w) {
+      // a spring up to a high meadow with its own pits, then a staircase home
+      c.run(2).pad(c.x).run(w(2.5));
+      c.up(4).run(w(4.5));
+      c.gap(w(2.6)).run(w(3.5)).spike(c.x).run(w(4));
+      c.gap(w(2.6)).run(w(3));
+      for (let i = 0; i < 4; i++) c.down().run(w(2.5));
+      c.run(w(1.5));
+    } },
+    { lvl: 0, tier: 3, name: "grand staircase", build(c, k, w) {
+      const L = stepLen(k);
+      c.run(2);
+      for (let i = 0; i < 5; i++) { c.up().run(L); if (i === 1 || i === 3) c.spike(c.x - 2); }
+      c.run(w(2)).block(c.x, 2, 1).run(2 + w(3.5));
+      c.down(5).run(w(4.5));        // one big drop back to the valley
+    } },
+    { lvl: 1, tier: 2, name: "foundry tower", build(c, k, w) {
+      const L = stepLen(k);
+      c.run(2).up().run(L).up().run(L).up().run(w(2.5));
+      c.cave(c.x, w(13));
+      c.run(w(3.5)).saw("ground", c.x).run(w(5)).spike(c.x).run(w(4.5));
+      c.down().run(w(3)).down().run(w(3)).down().run(w(4));
+    } },
+    { lvl: 1, tier: 3, name: "smokestack", build(c, k, w) {
+      c.run(2).pad(c.x).run(w(2.5));
+      c.up(4).run(w(4));
+      c.saw("ground", c.x).run(w(4.5));
+      c.gap(w(2.6)).run(w(3.5));
+      for (let i = 0; i < 4; i++) { c.down().run(w(2.5)); if (i === 2) c.spike(c.x - 1); }
+      c.run(w(2));
+    } },
+    { lvl: 2, tier: 2, name: "coral terrace", build(c, k, w) {
+      const L = stepLen(k);
+      c.run(2).up().run(L).up().run(L).up().run(w(3));
+      c.fall(c.x, 2).run(2 + w(4.5));
+      c.slide(c.x, "low", 2).run(2 + w(4));
+      c.down().run(w(3)).down().run(w(3)).down().run(w(4));
+    } },
+    { lvl: 3, tier: 2, name: "treehouse", build(c, k, w) {
+      const L = stepLen(k);
+      c.run(2).up().run(L).up().run(L).up().run(w(3));
+      c.low(c.x, 4).run(4 + w(3));
+      c.spike(c.x).run(w(4));
+      c.low(c.x, 3).run(3 + w(2.5));
+      c.down(3).run(w(4.5));
+    } },
+    { lvl: 4, tier: 2, name: "ice summit", build(c, k, w) {
+      const L = stepLen(k);
+      c.run(2).up().run(L).up().run(w(4));
+      const x0 = c.x, x1 = x0 + w(16);
+      c.flip(x0, x1).cspike(x0 + w(8));
+      c.run(x1 - x0 + w(4));
+      c.down().run(w(3)).down().run(w(4));
+    } },
+    { lvl: 5, tier: 3, name: "void citadel", build(c, k, w) {
+      const L = stepLen(k);
+      c.run(2).up().run(L).up().run(L).up().run(L).up().run(w(3));
+      c.saw("ground", c.x).run(w(4.5));
+      c.low(c.x, 3).run(3 + w(3));
+      c.gap(w(2.6)).run(w(3));
+      for (let i = 0; i < 4; i++) { c.down().run(w(2.5)); if (i === 1) c.spike(c.x - 1); }
+      c.run(w(2));
+    } },
+
     // ---- Orbs and pads: climbs, gravity flips and dashes ----
     { lvl: 0, tier: 1, name: "orb step", build(c, k, w) {
       c.run(3);
@@ -2154,14 +2234,16 @@
       c.orb(c.x + w(1.3), 1.2, "green");
       c.gap(w(6.5)).run(w(4));
     } },
-    { lvl: 1, tier: 1, name: "pink hops", build(c, k, w) {
+    { lvl: 1, tier: 1, name: "pink skips", build(c, k, w) {
+      // pits a little too wide to jump: tap the pink orb at the top of your jump for a small extra hop
       c.run(3);
-      const e = c.x;
-      c.cave(e - 1, w(12), 3.3);
-      for (let i = 0; i < 3; i++) c.orb(e + w(1.5) + i * w(3), 1.2, "pink");
-      c.at(e + w(10.5)).run(w(4));
-      c.spike(c.x, 2).run(w(4));
-      c.gap(w(2.6)).run(w(3));
+      let e = c.x;
+      c.orb(e + w(2), 1.9, "pink");
+      c.at(e + w(5.2)).run(w(4));
+      c.spike(c.x).run(w(4));
+      e = c.x;
+      c.orb(e + w(2), 1.9, "pink");
+      c.at(e + w(5.2)).run(w(4.5));
     } },
     { lvl: 5, tier: 3, pace: "slow", name: "orb tower", build(c, k, w) {
       c.run(3).pad(c.x).run(1);
@@ -2554,10 +2636,14 @@
   }
 
   // ---- Spawning -----------------------------------------------------------
-  const MAX_HB = 6;                        // highest floor level, in blocks
+  const MAX_HB = 8;                        // highest floor level, in blocks
   const snapBeat = x => Math.ceil(x / (2 * B) - 1e-9) * 2 * B;   // chunks start on an 8th note (2 blocks)
   // Chance of each tier by time into the level: easy in the first quarter, hardest in the last.
-  function tierWeights(t) { const q = t / LEVEL_SECONDS; return q < 0.25 ? [1, 0.15, 0] : q < 0.5 ? [0.6, 1, 0.1] : q < 0.75 ? [0.25, 1, 0.45] : [0, 0.3, 1]; }
+  function tierWeights(t) {
+    const q = t / LEVEL_SECONDS;
+    if (S.level < 2) return q < 0.2 ? [1, 0.35, 0] : q < 0.45 ? [0.5, 1, 0.25] : q < 0.7 ? [0.2, 1, 0.6] : [0, 0.4, 1];
+    return q < 0.25 ? [1, 0.15, 0] : q < 0.5 ? [0.6, 1, 0.1] : q < 0.75 ? [0.25, 1, 0.45] : [0, 0.3, 1];
+  }
   // Special sections per level: three star routes, a ship tunnel from level 2
   // and a ball corridor from level 4, at fixed points of the level's clock.
   function planEvents() {
@@ -2772,7 +2858,7 @@
         }
         case "o": {
           const dx = p.x + P / 2 - (o.x + B / 2), dy = p.h + ph / 2 - o.cy;
-          if (!o.used && mode !== "ship" && S.buffer > 0 && dx * dx + dy * dy < 40 * 40) {
+          if (!o.used && mode !== "ship" && (S.buffer > 0 || S.held) && dx * dx + dy * dy < 52 * 52) {
             o.used = true; S.buffer = 0; grounded = false;
             if (o.kind === "blue") { flipGravity(); p.vy = 0; }
             else if (o.kind === "green") { S.dashT = DASH_T; p.vy = 0; }
@@ -3064,7 +3150,7 @@
   }
   // A little picture for each zone
   const ZONE_ICON = {
-    meadow: `<circle cx="18" cy="7" r="4" fill="#ffd93b" stroke="#1f2d16" stroke-width="1.5"/><path d="M1 22c4-8 9-10 14-6s6 3 8 6z" fill="#74cf4a" stroke="#1f2d16" stroke-width="1.5" stroke-linejoin="round"/><path d="M7 17v-4" stroke="#1f2d16" stroke-width="1.5"/><circle cx="7" cy="12" r="2.2" fill="#ff5a4e" stroke="#1f2d16" stroke-width="1.2"/>`,
+    meadow: `<g stroke="#e8a100" stroke-width="1.6" stroke-linecap="round"><path d="M17 1.5v2M17 12.5v2M11.5 8h2M20.5 8h2M13.1 4.1l1.4 1.4M19.5 10.5l1.4 1.4M13.1 11.9l1.4-1.4M19.5 5.5l1.4-1.4"/></g><circle cx="17" cy="8" r="3.4" fill="#ffd93b" stroke="#1f2d16" stroke-width="1.1"/><path d="M15.6 8.6q1.4 1.5 2.8 0" fill="none" stroke="#1f2d16" stroke-width="0.9" stroke-linecap="round"/><path d="M0 23c3-7 9-9 14-6s7 3 10 6z" fill="#74cf4a" stroke="#1f2d16" stroke-width="1.3" stroke-linejoin="round"/><path d="M7 19v-5" stroke="#2f7a22" stroke-width="1.5"/><g fill="#ff6fb5" stroke="#1f2d16" stroke-width="0.8"><circle cx="7" cy="9.6" r="1.9"/><circle cx="9.3" cy="11.8" r="1.9"/><circle cx="7" cy="14" r="1.9"/><circle cx="4.7" cy="11.8" r="1.9"/></g><circle cx="7" cy="11.8" r="1.5" fill="#ffd93b" stroke="#1f2d16" stroke-width="0.8"/>`,
     forge: `<path d="M3 15h16l-2 3h-4l1 4H8l1-4H5z" fill="#4a2a1c" stroke="#1a0c06" stroke-width="1.3" stroke-linejoin="round"/><path d="M11 2c3 3 5 5 5 8a4 4 0 0 1-8 0c0-2 1-3 2-5 .5 1.5 1 2 2 2.5 0-2-.5-3.5-1-5.5z" fill="#ef8a23" stroke="#a4491d" stroke-width="1.2" stroke-linejoin="round"/><path d="M12 8c1 1.5 2 2.5 2 3.5a2 2 0 0 1-4 0c0-1 .8-1.8 2-3.5z" fill="#ffd23f"/>`,
     reef: `<path d="M2 21c3-1 6 1 10 0s7-1 10 0v2H2z" fill="#f1dca8"/><path d="M12 21v-8m0 0-4-4v-4m4 8 4-5V4m-4 9V6M8 9 5 7m11-1 3-2" fill="none" stroke="#e0607e" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>`,
     canopy: `<path d="M12 22c0-6 0-12 1-16" stroke="#6b4a2b" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M13 6C9 2 4 3 2 7c4-1 7-1 11-1zM13 6c3-4 8-4 10 0-4-1-6-1-10 0zM13 6c-2 1-6 5-6 9 3-3 5-6 6-9zM13 6c3 1 6 5 5 9-2-3-4-6-5-9z" fill="#3f8a3c" stroke="#1f3a24" stroke-width="1" stroke-linejoin="round"/>`,
