@@ -91,6 +91,70 @@
     color: var(--muted);
   }
   .meter-label b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .grade-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: 0.08em;
+  }
+  .grade-pill {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-radius: 8px;
+    padding: 0 8px;
+    font-weight: 800;
+    font-size: 20px;
+    line-height: 26px;
+    letter-spacing: 0.02em;
+  }
+  .grade-row .zone { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .grade-progress {
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.14);
+    overflow: hidden;
+  }
+  .grade-progress div { height: 100%; width: 0%; background: var(--ink); opacity: 0.8; border-radius: 2px; }
+
+  /* ================= Toast banner ================= */
+  .toast {
+    position: fixed;
+    left: 50%;
+    top: 34%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+    opacity: 0;
+    white-space: nowrap;
+  }
+  .toast.show { animation: toast 2.4s ease-out forwards; }
+  .toast .big {
+    font-style: italic;
+    font-weight: 800;
+    font-size: clamp(34px, 12vw, 64px);
+    line-height: 0.95;
+    color: var(--accent);
+    text-shadow: 0 4px 0 rgba(0, 0, 0, 0.35), 0 0 24px rgba(0, 0, 0, 0.25);
+  }
+  .toast .sub {
+    font-weight: 700;
+    font-size: 20px;
+    letter-spacing: 0.24em;
+    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+  }
+  @keyframes toast {
+    0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+    12%  { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+    20%  { transform: translate(-50%, -50%) scale(1); }
+    80%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -64%) scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .toast.show { animation: toast-fade 2.4s linear forwards; }
+    @keyframes toast-fade { 0%, 85% { opacity: 1; transform: translate(-50%, -50%); } 100% { opacity: 0; transform: translate(-50%, -50%); } }
+  }
   .pumpbar {
     height: 12px;
     border-radius: 6px;
@@ -171,10 +235,14 @@
     <div class="best" id="hudBest">BEST 0 m</div>
   </div>
   <div class="meters">
+    <div class="grade-row"><span class="grade-pill" id="hudGrade">V0</span><span class="zone" id="hudZone">GYM WALL</span></div>
+    <div class="grade-progress" aria-hidden="true"><div id="hudNext"></div></div>
     <div class="meter-label"><span>PUMP</span><b id="pumpText">0%</b></div>
     <div class="pumpbar" id="pumpBar"><div id="pumpFill"></div></div>
   </div>
 </div>
+
+<div class="toast" id="toast"><div class="big" id="toastBig"></div><div class="sub" id="toastSub"></div></div>
 
 <button class="chalk-btn" id="chalkBtn" aria-label="Chalk up to recover from pump">
   <span class="face">
@@ -198,7 +266,7 @@
   // 1. CONFIG
   // =====================================================================
   const WALL_W = 7.5;                        // world width in metres
-  const X_MIN = 1.3, X_MAX = WALL_W - 1.3;   // where holds may sit
+  const X_MIN = 1.55, X_MAX = WALL_W - 1.55; // where holds may sit
   const REACH = 2.5;                         // static reach, hands to hold
   const START_Y = 2.2;                       // height of the first hold
   const GRAVITY = 20;
@@ -297,7 +365,7 @@
   const ctx = canvas.getContext('2d');
   let W = 0, H = 0, DPR = 1, S = 1, OX = 0;   // S = px per metre, OX = world x offset
   const cam = { y: 0 };
-  let wallPattern = null, wallTile = 256;
+  let wallTile = 256;
 
   function resize() {
     DPR = Math.min(window.devicePixelRatio || 1, 2.5);
@@ -309,7 +377,7 @@
     canvas.style.height = H + 'px';
     S = Math.min(W / WALL_W, H / 11);        // wide screens: keep ~11 m visible
     OX = (W - WALL_W * S) / 2;
-    buildWallTexture();
+    buildWallTextures();
   }
 
   const sx = x => OX + x * S;
@@ -317,28 +385,134 @@
   const toWorld = (px, py) => ({ x: (px - OX) / S, y: cam.y + (H - py) / S });
 
   // Wall silhouette: how far the rock edge sits in from each side (metres).
-  const edgeL = y => 0.6 + 0.22 * Math.sin(y * 0.41 + 1.3) + 0.12 * Math.sin(y * 1.27) + 0.06 * Math.sin(y * 3.1 + 0.7);
-  const edgeR = y => 0.6 + 0.22 * Math.sin(y * 0.37 + 4.1) + 0.12 * Math.sin(y * 1.19 + 2.2) + 0.06 * Math.sin(y * 2.9 + 2.1);
+  const edgeL = y => 0.75 + 0.25 * Math.sin(y * 0.41 + 1.3) + 0.14 * Math.sin(y * 1.27) + 0.06 * Math.sin(y * 3.1 + 0.7);
+  const edgeR = y => 0.75 + 0.25 * Math.sin(y * 0.37 + 4.1) + 0.14 * Math.sin(y * 1.19 + 2.2) + 0.06 * Math.sin(y * 2.9 + 2.1);
 
-  function buildWallTexture() {
+  // ---------- Wall zones & textures ----------
+  // Each grade zone gets its own wall: gym, limestone, granite, then ice.
+  const ZONES = [
+    { name: 'GYM WALL',  accent: '#ff7a59', ledge: '#8a6a4a', ledgeTop: '#b08b62' },
+    { name: 'LIMESTONE', accent: '#d9822b', ledge: '#a88c64', ledgeTop: '#d2b88e' },
+    { name: 'GRANITE',   accent: '#c0566a', ledge: '#66636a', ledgeTop: '#8e8a90' },
+    { name: 'ICE',       accent: '#3a8fd1', ledge: '#8fbcd6', ledgeTop: '#e4f3fb' },
+  ];
+  const zoneOf = g => Math.min(g, ZONES.length - 1);
+  let zonePatterns = [];
+
+  function buildWallTextures() {
     wallTile = Math.round(3 * S);             // one tile = 3 m
-    const size = Math.round(wallTile * DPR);
-    const t = document.createElement('canvas');
-    t.width = size; t.height = size;
-    const g = t.getContext('2d');
-    g.fillStyle = COL.rock;
-    g.fillRect(0, 0, size, size);
-    let seed = 11;
-    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-    for (let i = 0; i < size * 1.4; i++) {
-      g.fillStyle = rnd() < 0.5 ? COL.rockLight : COL.rockDark;
-      g.globalAlpha = 0.25 + rnd() * 0.35;
+    const size = Math.max(64, Math.round(wallTile * DPR));
+    const m = size / 3;                       // tile px per metre
+    zonePatterns = [paintGym, paintLimestone, paintGranite, paintIce].map((paint, i) => {
+      const t = document.createElement('canvas');
+      t.width = t.height = size;
+      const g = t.getContext('2d');
+      let seed = 17 + i * 101;
+      const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+      paint(g, size, m, rnd);
+      return ctx.createPattern(t, 'repeat');
+    });
+  }
+
+  function speckle(g, size, n, colors, rMin, rMax, aMin, aMax, rnd) {
+    for (let i = 0; i < n; i++) {
+      g.fillStyle = colors[Math.floor(rnd() * colors.length)];
+      g.globalAlpha = aMin + rnd() * (aMax - aMin);
       g.beginPath();
-      g.arc(rnd() * size, rnd() * size, (0.6 + rnd() * 2.2) * DPR, 0, Math.PI * 2);
+      g.arc(rnd() * size, rnd() * size, (rMin + rnd() * (rMax - rMin)) * DPR, 0, Math.PI * 2);
       g.fill();
     }
     g.globalAlpha = 1;
-    wallPattern = ctx.createPattern(t, 'repeat');
+  }
+
+  function crack(g, x, y, len, rnd, color, width) {
+    g.strokeStyle = color;
+    g.lineWidth = width * DPR;
+    g.beginPath();
+    g.moveTo(x, y);
+    for (let k = 0; k < 6; k++) {
+      x += (rnd() - 0.5) * len * 0.5;
+      y += rnd() * len * 0.3;
+      g.lineTo(x, y);
+    }
+    g.stroke();
+  }
+
+  function paintGym(g, size, m, rnd) {
+    g.fillStyle = '#c3ccd6';
+    g.fillRect(0, 0, size, size);
+    speckle(g, size, size * 1.2, ['#b3bdc9', '#d7dee5'], 0.4, 1.3, 0.4, 0.8, rnd);
+    // plywood panels, 1.5 m
+    g.strokeStyle = 'rgba(40,50,62,0.22)';
+    g.lineWidth = 2 * DPR;
+    for (let i = 0; i <= 2; i++) {
+      const p = (i * size) / 2;
+      g.beginPath(); g.moveTo(p, 0); g.lineTo(p, size); g.moveTo(0, p); g.lineTo(size, p); g.stroke();
+    }
+    // bolt-on T-nut grid
+    g.fillStyle = 'rgba(30,36,44,0.4)';
+    const step = size / 12;
+    for (let y = 0; y < 12; y++) {
+      for (let x = 0; x < 12; x++) {
+        g.beginPath();
+        g.arc(((x + 0.5 + (y % 2) * 0.5) * step) % size, (y + 0.5) * step, 1.3 * DPR, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+  }
+
+  function paintLimestone(g, size, m, rnd) {
+    g.fillStyle = '#cdb38c';
+    g.fillRect(0, 0, size, size);
+    for (let i = 0; i < 10; i++) {
+      const y0 = rnd() * size, th = (0.03 + rnd() * 0.12) * m;
+      const k = 1 + Math.floor(rnd() * 3), ph = rnd() * 6.28, amp = (0.02 + rnd() * 0.05) * m;
+      g.fillStyle = rnd() < 0.5 ? 'rgba(120,85,45,0.16)' : 'rgba(255,245,225,0.24)';
+      for (const off of [0, -size]) {
+        g.beginPath();
+        for (let x = 0; x <= size; x += size / 48) g.lineTo(x, off + y0 + Math.sin((x / size) * Math.PI * 2 * k + ph) * amp);
+        for (let x = size; x >= 0; x -= size / 48) g.lineTo(x, off + y0 + th + Math.sin((x / size) * Math.PI * 2 * k + ph) * amp);
+        g.fill();
+      }
+    }
+    // water streaks (tufa)
+    for (let i = 0; i < 5; i++) {
+      const x = rnd() * size, w = (0.08 + rnd() * 0.25) * m;
+      g.fillStyle = 'rgba(95,72,48,0.1)';
+      g.fillRect(x, 0, w, size);
+    }
+    speckle(g, size, size * 0.5, ['#7a6246', '#e8dcc4'], 0.5, 2, 0.2, 0.5, rnd);
+    // pores
+    speckle(g, size, 30, ['#5e4a33'], 1.5, 4, 0.25, 0.45, rnd);
+  }
+
+  function paintGranite(g, size, m, rnd) {
+    g.fillStyle = '#8d898c';
+    g.fillRect(0, 0, size, size);
+    speckle(g, size, size * 2.2, ['#3d3b40', '#e9e5e1', '#c6a19a', '#6f6b70', '#a7a3a6'], 0.5, 1.8, 0.35, 0.85, rnd);
+    // feldspar crystals
+    for (let i = 0; i < 40; i++) {
+      g.save();
+      g.translate(rnd() * size, rnd() * size);
+      g.rotate(rnd() * Math.PI);
+      g.fillStyle = rnd() < 0.5 ? 'rgba(214,170,160,0.5)' : 'rgba(240,236,230,0.4)';
+      g.fillRect(0, 0, (2 + rnd() * 5) * DPR, (1.5 + rnd() * 3) * DPR);
+      g.restore();
+    }
+    for (let i = 0; i < 4; i++) crack(g, rnd() * size, rnd() * size, size * 0.25, rnd, 'rgba(30,28,32,0.35)', 1.4);
+  }
+
+  function paintIce(g, size, m, rnd) {
+    g.fillStyle = '#cfe7f3';
+    g.fillRect(0, 0, size, size);
+    for (let i = 0; i < 18; i++) {
+      const x = rnd() * size, w = (0.05 + rnd() * 0.35) * m;
+      g.fillStyle = rnd() < 0.5 ? 'rgba(255,255,255,0.35)' : 'rgba(120,180,220,0.22)';
+      g.fillRect(x, 0, w, size);
+    }
+    speckle(g, size, 90, ['#ffffff'], 0.8, 2.4, 0.35, 0.7, rnd);
+    for (let i = 0; i < 6; i++) crack(g, rnd() * size, rnd() * size, size * 0.3, rnd, 'rgba(255,255,255,0.75)', 1.2);
+    for (let i = 0; i < 3; i++) crack(g, rnd() * size, rnd() * size, size * 0.3, rnd, 'rgba(70,130,180,0.35)', 1);
   }
 
   // =====================================================================
@@ -357,7 +531,9 @@
     pocket:  { r: 0.24, pump: 6 },
     crumble: { r: 0.34, pump: 3.5, color: '#caa57d', shade: '#8b6947', breakAt: 1.5 },
     foot:    { r: 0.12 },
+    ledge:   { r: 0.3,  pump: -40 },
   };
+  const LEDGE_EVERY = 50;   // metres between rest ledges
 
   let holds = [];
   const gen = { y: 0, x: 0, n: 0, sinceDyno: 0, last: null };
@@ -412,20 +588,45 @@
   }
 
   function isFree(x, y, minD) {
-    return !holds.some(h => !h.broken && dist(h.x, h.y, x, y) < minD);
+    return !holds.some(h => !h.broken && (h.type === 'ledge' ? Math.abs(h.y - y) < 0.7 : dist(h.x, h.y, x, y) < minD));
+  }
+
+  // The point of a hold nearest to p (ledges span the whole wall).
+  function holdPoint(h, p) {
+    if (h.type === 'ledge') return { x: clamp(p.x, X_MIN, X_MAX), y: h.y };
+    return { x: h.x, y: h.y };
+  }
+
+  function addLedge(y) {
+    holds = holds.filter(h => h.route || Math.abs(h.y - y) > 0.75);
+    const h = addHold(WALL_W / 2, y, 'ledge', 1, true);
+    h.rot = 0;
+    h.grabX = null;
+    h.visited = false;
+    return h;
   }
 
   function generate(upTo) {
     while (gen.y < upTo) {
       const g = gradeAt(gen.y);
       const d = difficulty(g);
+      // A rest ledge every 50 m, reachable from the last route hold.
+      const nextLedge = START_Y + LEDGE_EVERY * Math.ceil((gen.y - START_Y + 0.01) / LEDGE_EVERY);
+      if (nextLedge - gen.y <= 2.2 && gen.n > 0) {
+        gen.last = addLedge(nextLedge);
+        gen.y = nextLedge;
+        gen.x = rand(X_MIN + 0.3, X_MAX - 0.3);
+        gen.sinceDyno = 0;
+        gen.n++;
+        continue;
+      }
       let dy = rand(d.gapMin, d.gapMax);
       let nx = gen.x + rand(-d.dx, d.dx);
       if (nx < X_MIN || nx > X_MAX) nx = 2 * gen.x - nx;         // bounce off the edges
       nx = clamp(nx, X_MIN, X_MAX);
       // Now and then the route needs a dyno: a gap beyond static reach.
       const dynoChance = gen.y > START_Y + 12 ? Math.min(0.08 + g * 0.05, 0.3) : 0;
-      const isDyno = gen.sinceDyno > 5 && Math.random() < dynoChance;
+      const isDyno = gen.sinceDyno > 5 && Math.random() < dynoChance && nextLedge - gen.y > 4;
       if (isDyno) {
         dy = rand(2.75, 3.3 + Math.min(g * 0.1, 0.4));
         nx = clamp(gen.x + rand(-0.9, 0.9), X_MIN, X_MAX);
@@ -465,6 +666,10 @@
 
   // Where each hand sits on a hold.
   function gripPoints(h) {
+    if (h.type === 'ledge') {
+      const x = h.grabX != null ? h.grabX : h.x;
+      return [{ x: x - 0.12, y: h.y + 0.04 }, { x: x + 0.12, y: h.y + 0.04 }];
+    }
     const spread = h.type === 'crimp' ? 0.11 : h.type === 'pinch' || h.type === 'pocket' ? 0.055 : 0.09;
     const top = h.type === 'pinch' ? h.r * 0.5 : h.type === 'crimp' ? h.r * 0.15 : 0.02;
     return [{ x: h.x - spread, y: h.y + top }, { x: h.x + spread, y: h.y + top }];
@@ -512,12 +717,13 @@
     let best = null, bestD = 0.8;
     for (const h of holds) {
       if (h.broken || h === c.hold || h === c.footHold[1 - side]) continue;
-      const top = { x: h.x, y: h.y + h.r * 0.45 };
+      const top = h.type === 'ledge' ? { x: clamp(ideal.x, X_MIN, X_MAX), y: h.y + 0.1 } : { x: h.x, y: h.y + h.r * 0.45 };
       if (top.y > hip.y - 0.3) continue;
       if (dist(root.x, root.y, top.x, top.y) > LEG * 0.96) continue;
       const d = dist(top.x, top.y, ideal.x, ideal.y);
       if (d < bestD) { bestD = d; best = h; }
     }
+    if (best && best.type === 'ledge') return { hold: best, p: { x: clamp(ideal.x, X_MIN, X_MAX), y: best.y + 0.1 } };
     if (best) return { hold: best, p: { x: best.x + s * 0.05, y: best.y + best.r * 0.45 } };
     return { hold: null, p: ideal };
   }
@@ -738,7 +944,9 @@
   let height = 0, time = 0, deadAt = 0;
   let missFx = null;
   let fallReason = '';
-  const stats = { holds: 0, dynos: 0 };
+  const stats = { holds: 0, dynos: 0, grade: 0 };
+  let checkpoint = null, checkpointUsed = false;
+  function onLedge() { /* sound hook */ }
 
   function reset() {
     holds = [];
@@ -755,7 +963,9 @@
     state = 'play';
     missFx = null;
     floats = [];
-    stats.holds = 0; stats.dynos = 0;
+    stats.holds = 0; stats.dynos = 0; stats.grade = 0;
+    checkpoint = null; checkpointUsed = false;
+    clouds = []; birds = [];
     timeScale = 1; slowmo = 0;
     press.active = false; press.charging = false;
     updateHud(true);
@@ -764,6 +974,14 @@
   function onGrab(h) {
     h.grip = 0;              // slopers restart their slip timer each grab
     stats.holds++;
+    if (h.type === 'ledge' && !h.visited) {
+      h.visited = true;
+      climber.pump = 0;
+      chalk.uses = CHALK.max;
+      if (!checkpointUsed) checkpoint = h;
+      floatText(checkpointUsed ? 'REST LEDGE · PUMP RESET' : 'REST LEDGE · CHECKPOINT', h.grabX, h.y + 0.8, '#5fd08a', 24);
+      onLedge(h);
+    }
   }
 
   function handsMid() { return mid(climber.handT[0], climber.handT[1]); }
@@ -773,21 +991,37 @@
     let target = null, bestD = Infinity;
     for (const h of holds) {
       if (h.broken || h.type === 'foot') continue;
-      const d = dist(h.x, h.y, p.x, p.y);
+      const q = holdPoint(h, p);
+      const d = dist(q.x, q.y, p.x, p.y);
       if (d < tol + h.r && d < bestD) { bestD = d; target = h; }
     }
     return target;
   }
 
   function canReach(h) {
-    const hm = handsMid();
-    return dist(hm.x, hm.y, h.x, h.y) <= REACH;
+    let hm = handsMid();
+    // on a ledge you can shuffle along it, so reach from the nearest point
+    const cur = climber.hold;
+    if (cur && cur.type === 'ledge' && h !== cur) hm = { x: clamp(h.x, X_MIN, X_MAX), y: hm.y };
+    const q = holdPoint(h, hm);
+    return dist(hm.x, hm.y, q.x, q.y) <= REACH;
   }
 
   function onTap(px, py) {
     if (state !== 'play' || climber.move || climber.dyno) return;
     const p = toWorld(px, py);
     const h = holdAt(p);
+    if (h && h.type === 'ledge') {
+      // grab (or traverse along) the ledge where you tapped
+      const gx = clamp(p.x, X_MIN, X_MAX);
+      if (h === climber.hold && Math.abs(gx - h.grabX) < 0.4) return;
+      if (canReach(h) || h === climber.hold) {
+        const hm = handsMid();
+        h.grabX = h === climber.hold ? gx : clamp(gx, hm.x - 1.6, hm.x + 1.6);
+        startReach(climber, h);
+        return;
+      }
+    }
     if (!h || h === climber.hold) { missFx = { x: p.x, y: p.y, t: 0 }; return; }
     if (canReach(h)) {
       climber.pump = Math.min(100, climber.pump + PUMP.moveCost);
@@ -845,7 +1079,8 @@
   }
 
   function catchRange(h, p) {
-    return dist(h.x, h.y, p.x, p.y) < DYNO.catchR + h.r * 0.6;
+    const q = holdPoint(h, p);
+    return dist(q.x, q.y, p.x, p.y) < DYNO.catchR + h.r * 0.6;
   }
 
   function launchDyno() {
@@ -864,7 +1099,7 @@
     let best = null, bestD = Infinity;
     for (const h of holds) {
       if (h.broken || h.type === 'foot' || h === d.from) continue;
-      const dd = dist(h.x, h.y, d.p.x, d.p.y);
+      const q = holdPoint(h, d.p), dd = dist(q.x, q.y, d.p.x, d.p.y);
       if (catchRange(h, d.p) && dd < bestD) { bestD = dd; best = h; }
     }
     return best;
@@ -916,6 +1151,7 @@
 
   function catchHold(h) {
     const c = climber;
+    if (h.type === 'ledge') h.grabX = clamp(c.dyno.p.x, X_MIN, X_MAX);
     c.dyno = null;
     c.hold = h;
     c.handT = gripPoints(h);
@@ -1072,7 +1308,11 @@
     if (slowmo > 0) { slowmo -= realDt; target = 0.22; }
     else if (climber.dyno && climber.dyno.phase === 'fly') {
       const d = climber.dyno;
-      const near = holds.some(h => !h.broken && h.type !== 'foot' && h !== d.from && dist(h.x, h.y, d.p.x, d.p.y) < 1.3);
+      const near = holds.some(h => {
+        if (h.broken || h.type === 'foot' || h === d.from) return false;
+        const q = holdPoint(h, d.p);
+        return dist(q.x, q.y, d.p.x, d.p.y) < 1.3;
+      });
       if (near) target = 0.45;
     }
     timeScale += (target - timeScale) * Math.min(1, realDt * 12);
@@ -1083,6 +1323,7 @@
     floats = floats.filter(f => (f.t += realDt) < f.life);
 
     updatePress();
+    updateAmbient(realDt);
     updateChalk(dt);
     if (state === 'play') { updateHoldTimers(dt); updatePump(dt); updateDyno(dt); }
     climber.coil = press.charging && !!climber.hold;
@@ -1097,7 +1338,12 @@
     if (state === 'play') {
       if (climber.hold) {
         const h = Math.max(height, Math.floor(climber.hold.y - START_Y));
-        if (h > height) { height = h; updateHud(); }
+        if (h > height) {
+          height = h;
+          updateHud();
+          const g = Math.floor(height / GRADE_EVERY);
+          if (g > stats.grade) { stats.grade = g; onGradeUp(g); }
+        }
       }
       const target = Math.max(climber.hip.y, climber.dyno ? climber.dyno.p.y - 1.4 : -Infinity) - (H * 0.36) / S;
       cam.y += (target - cam.y) * Math.min(1, dt * 4);
@@ -1118,37 +1364,326 @@
   }
   function onGameOver() { /* screens hook */ }
 
+  function onGradeUp(g) {
+    showToast(`V${g} UNLOCKED`, ZONES[zoneOf(g)].name);
+    updateHud(true);
+  }
+
   // =====================================================================
   // 9. DRAW: WORLD
   // =====================================================================
+  // ---------- Sky: day -> sunset -> night as you climb ----------
+  const SKY = [
+    { h: 0,   top: [79, 159, 224], bot: [191, 228, 247], light: [0, 0, 0, 0] },
+    { h: 40,  top: [88, 150, 215], bot: [255, 222, 170], light: [255, 170, 90, 0.06] },
+    { h: 70,  top: [104, 80, 160], bot: [255, 150, 92],  light: [255, 110, 60, 0.16] },
+    { h: 100, top: [40, 40, 92],   bot: [190, 88, 122],  light: [70, 30, 100, 0.32] },
+    { h: 135, top: [7, 11, 31],    bot: [26, 35, 80],    light: [6, 10, 34, 0.55] },
+  ];
+  const mixArr = (a, b, t) => a.map((v, i) => lerp(v, b[i], t));
+  const rgb = a => `rgb(${a[0] | 0},${a[1] | 0},${a[2] | 0})`;
+  function skyAt(h) {
+    let i = 0;
+    while (i < SKY.length - 2 && h > SKY[i + 1].h) i++;
+    const a = SKY[i], b = SKY[i + 1];
+    const t = clamp((h - a.h) / (b.h - a.h), 0, 1);
+    return { top: mixArr(a.top, b.top, t), bot: mixArr(a.bot, b.bot, t), light: mixArr(a.light, b.light, t) };
+  }
+  const altitude = () => cam.y + H / S / 2 - START_Y;
+  const nightness = () => clamp((altitude() - 95) / 40, 0, 1);
+
+  // ---------- Ambient life: stars, clouds, birds ----------
+  const stars = Array.from({ length: 80 }, () => ({ x: Math.random(), y: Math.random(), r: rand(0.5, 1.6), p: rand(0, 6) }));
+  let clouds = [], birds = [], birdTimer = 4, wispTimer = 6;
+
+  function makeCloud(front, anywhere) {
+    const par = front ? 1.15 : rand(0.25, 0.5);
+    const s = front ? rand(1.4, 2.2) : rand(0.8, 1.5);
+    const yScreen = anywhere ? rand(-50, H + 50) : -80 - rand(0, 120);
+    return {
+      front, par, s,
+      x: front ? (Math.random() < 0.5 ? -200 : W + 200) : rand(-60, W + 60),
+      y: cam.y * par + (H - yScreen) / S,             // parallax "world" height
+      vx: front ? 0 : rand(-12, 12),
+      puffs: Array.from({ length: 5 }, (_, i) => ({ dx: (i - 2) * 22 + rand(-6, 6), dy: rand(-10, 6), r: rand(18, 30) })),
+    };
+  }
+
+  function updateAmbient(dt) {
+    const alt = altitude();
+    // back clouds keep ~7 alive, recycled as they scroll off the bottom
+    while (clouds.filter(c => !c.front).length < 7) clouds.push(makeCloud(false, clouds.length < 7 && time < 0.1));
+    // front wisps drift across the wall higher up
+    wispTimer -= dt;
+    if (alt > 30 && wispTimer <= 0) {
+      wispTimer = rand(7, 14);
+      const c = makeCloud(true, true);
+      c.vx = (c.x < 0 ? 1 : -1) * rand(35, 55);
+      clouds.push(c);
+    }
+    for (const c of clouds) c.x += c.vx * dt;
+    clouds = clouds.filter(c => {
+      const ys = H - (c.y - cam.y * c.par) * S;
+      if (ys > H + 150) return false;
+      if (c.front) return c.x > -300 && c.x < W + 300;
+      if (c.x < -150) c.x = W + 140; else if (c.x > W + 150) c.x = -140;
+      return true;
+    });
+
+    // birds by day and at sunset
+    birdTimer -= dt;
+    if (birdTimer <= 0 && nightness() < 0.5) {
+      birdTimer = rand(7, 16);
+      const dir = Math.random() < 0.5 ? 1 : -1, n = 3 + Math.floor(Math.random() * 3);
+      const y0 = rand(H * 0.12, H * 0.5), v = rand(55, 85);
+      for (let i = 0; i < n; i++) {
+        birds.push({ x: (dir > 0 ? -30 : W + 30) - dir * i * 26, y: y0 + Math.abs(i - (n - 1) / 2) * 14, vx: v * dir, p: rand(0, 6), s: rand(0.8, 1.1) });
+      }
+    }
+    for (const b of birds) { b.x += b.vx * dt; b.p += dt * 11; }
+    birds = birds.filter(b => b.x > -80 && b.x < W + 80);
+  }
+
+  function drawCloud(c, color, alpha) {
+    const cx = c.x, cy = H - (c.y - cam.y * c.par) * S;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    for (const p of c.puffs) {
+      ctx.moveTo(cx + p.dx * c.s + p.r * c.s, cy + p.dy * c.s);
+      ctx.arc(cx + p.dx * c.s, cy + p.dy * c.s, p.r * c.s, 0, Math.PI * 2);
+    }
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  function cloudColor() {
+    const n = nightness(), sk = skyAt(altitude());
+    return rgb(mixArr(mixArr([255, 255, 255], sk.bot, 0.35), [60, 70, 110], n * 0.8));
+  }
+
   function drawSky() {
-    ctx.fillStyle = COL.sky;
+    const alt = altitude(), sk = skyAt(alt), n = nightness();
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, rgb(sk.top));
+    g.addColorStop(1, rgb(sk.bot));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    // stars
+    if (n > 0) {
+      ctx.fillStyle = '#ffffff';
+      for (const s of stars) {
+        ctx.globalAlpha = n * (0.45 + 0.55 * Math.sin(time * 2 + s.p));
+        ctx.beginPath(); ctx.arc(s.x * W, s.y * H * 0.9, s.r, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+    // sun sinks toward the horizon, then the moon rises
+    const sunK = clamp(alt / 105, 0, 1);
+    if (sunK < 1) {
+      const x = W - Math.max(26, OX * 0.6), y = H * (0.14 + 0.8 * sunK);
+      const col = rgb(mixArr([255, 236, 150], [255, 96, 60], sunK));
+      const glow = ctx.createRadialGradient(x, y, 10, x, y, 120);
+      glow.addColorStop(0, `rgba(255,220,150,${0.55 * (1 - sunK * 0.5)})`);
+      glow.addColorStop(1, 'rgba(255,220,150,0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(x - 120, y - 120, 240, 240);
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.arc(x, y, 34, 0, Math.PI * 2); ctx.fill();
+    }
+    if (n > 0) {
+      const x = Math.max(30, OX * 0.6), y = H * 0.2;
+      ctx.globalAlpha = n;
+      ctx.fillStyle = '#f4f1e4';
+      ctx.beginPath(); ctx.arc(x, y, 26, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = rgb(sk.top);
+      ctx.beginPath(); ctx.arc(x + 11, y - 6, 22, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    const cc = cloudColor();
+    for (const c of clouds) if (!c.front) drawCloud(c, cc, 0.85);
+  }
+
+  function drawForeground() {
+    // birds
+    ctx.strokeStyle = nightness() > 0.3 ? '#0c1020' : '#1f2833';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    for (const b of birds) {
+      const f = Math.sin(b.p) * 6 * b.s, w = 9 * b.s;
+      ctx.beginPath();
+      ctx.moveTo(b.x - w, b.y - f);
+      ctx.quadraticCurveTo(b.x - w * 0.4, b.y - f * 0.2 - 2, b.x, b.y);
+      ctx.quadraticCurveTo(b.x + w * 0.4, b.y - f * 0.2 - 2, b.x + w, b.y - f);
+      ctx.stroke();
+    }
+    const cc = cloudColor();
+    for (const c of clouds) if (c.front) drawCloud(c, cc, 0.35);
+  }
+
+  // Sunset warmth and night darkness wash over the wall; at night a
+  // headlamp pool of light follows the climber.
+  function drawLighting() {
+    const L = skyAt(altitude()).light;
+    if (L[3] <= 0.01) return;
+    const col = `${L[0] | 0},${L[1] | 0},${L[2] | 0}`;
+    const n = nightness();
+    if (n > 0.05 && climber.j) {
+      const hx = sx(climber.j.head.x), hy = sy(climber.j.head.y) - 20;
+      const g = ctx.createRadialGradient(hx, hy, 20, hx, hy, Math.max(W, H) * 0.45);
+      g.addColorStop(0, `rgba(${col},${L[3] * (1 - n * 0.9)})`);
+      g.addColorStop(0.35, `rgba(${col},${L[3] * (1 - n * 0.35)})`);
+      g.addColorStop(1, `rgba(${col},${L[3]})`);
+      ctx.fillStyle = g;
+    } else {
+      ctx.fillStyle = `rgba(${col},${L[3]})`;
+    }
     ctx.fillRect(0, 0, W, H);
   }
 
-  function wallPath() {
-    const top = cam.y + H / S + 1, bot = cam.y - 1;
+  // ---------- Wall ----------
+  const zoneStart = g => START_Y + GRADE_EVERY * g;       // bottom of grade g
+  const seam = x => 0.14 * Math.sin(x * 5.3) + 0.07 * Math.sin(x * 13.1);
+
+  function wallPath(bot, top) {
     ctx.beginPath();
     for (let y = bot; y <= top; y += 0.25) ctx.lineTo(sx(edgeL(y)), sy(y));
+    ctx.lineTo(sx(edgeL(top)), sy(top));
     for (let y = top; y >= bot; y -= 0.25) ctx.lineTo(sx(WALL_W - edgeR(y)), sy(y));
+    ctx.lineTo(sx(WALL_W - edgeR(bot)), sy(bot));
     ctx.closePath();
   }
 
   function drawWall() {
-    ctx.save();
-    wallPath();
+    const top = cam.y + H / S + 1, bot = Math.max(0, cam.y - 1);
+    if (top <= bot) return;
     const ty = ((H + cam.y * S) % wallTile + wallTile) % wallTile;
-    wallPattern.setTransform(new DOMMatrix().translate(OX, ty).scale(1 / DPR));
-    ctx.fillStyle = wallPattern;
-    ctx.fill();
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-    ctx.stroke();
+    const mtx = new DOMMatrix().translate(OX, ty).scale(1 / DPR);
+    const xl = -OX / S - 1, xr = (W - OX) / S + 1;
+
+    ctx.save();
+    wallPath(bot, top);
+    ctx.clip();
+    for (let g = gradeAt(bot); g <= gradeAt(top); g++) {
+      const pat = zonePatterns[zoneOf(g)];
+      pat.setTransform(mtx);
+      ctx.save();
+      // clip to this zone's band, with a jagged seam on each boundary
+      ctx.beginPath();
+      if (g === 0) { ctx.moveTo(sx(xr), H + 10); ctx.lineTo(sx(xl), H + 10); }
+      else for (let x = xr; x >= xl; x -= 0.2) ctx.lineTo(sx(x), sy(zoneStart(g) + seam(x)));
+      for (let x = xl; x <= xr; x += 0.2) ctx.lineTo(sx(x), sy(zoneStart(g + 1) + seam(x)));
+      ctx.closePath();
+      ctx.clip();
+      ctx.fillStyle = pat;
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+      if (g > 0) {
+        ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        for (let x = xl; x <= xr; x += 0.2) ctx.lineTo(sx(x), sy(zoneStart(g) + seam(x)));
+        ctx.stroke();
+      }
+    }
+    // darken toward the edges for depth
+    const ao = ctx.createLinearGradient(sx(0), 0, sx(WALL_W), 0);
+    ao.addColorStop(0, 'rgba(0,0,0,0.4)');
+    ao.addColorStop(0.2, 'rgba(0,0,0,0)');
+    ao.addColorStop(0.8, 'rgba(0,0,0,0)');
+    ao.addColorStop(1, 'rgba(0,0,0,0.4)');
+    ctx.fillStyle = ao;
+    ctx.fillRect(0, 0, W, H);
+    drawBanners(bot, top);
     ctx.restore();
+
+    wallPath(bot, top);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.stroke();
+
+    // ground and crash pad
     const gy = sy(0);
     if (gy < H) {
-      ctx.fillStyle = '#3f6b3a';
+      ctx.fillStyle = '#4c7a3d';
       ctx.fillRect(0, gy, W, H - gy);
+      ctx.fillStyle = '#3f6a33';
+      ctx.fillRect(0, gy, W, 6);
+      const px0 = sx(0.9), px1 = sx(WALL_W - 0.9), ph = 0.42 * S;
+      ctx.fillStyle = '#244a86';
+      roundRect(px0, gy - ph, px1 - px0, ph + 6, 8); ctx.fill();
+      ctx.fillStyle = '#3b6fc0';
+      roundRect(px0, gy - ph, px1 - px0, ph * 0.45, 8); ctx.fill();
+    }
+  }
+
+  // Painted grade banners at the start of every zone.
+  function drawBanners(bot, top) {
+    for (let g = Math.max(1, gradeAt(bot)); g <= gradeAt(top) + 1; g++) {
+      const y = zoneStart(g) + 0.75;
+      if (y < bot - 1 || y > top + 1) continue;
+      const z = ZONES[zoneOf(g)];
+      const cx = sx(WALL_W / 2), cy = sy(y), w = 3.3 * S, h = 0.62 * S;
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      bannerPath(cx + 4, cy + 5, w, h); ctx.fill();
+      ctx.fillStyle = z.accent;
+      bannerPath(cx, cy, w, h); ctx.fill();
+      ctx.fillStyle = '#fff8ea';
+      ctx.font = `italic 800 ${Math.round(h * 0.62)}px "Barlow Condensed", system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`V${g} · ${z.name}`, cx, cy + 1);
+    }
+  }
+  function bannerPath(cx, cy, w, h) {
+    const n = h * 0.35;
+    ctx.beginPath();
+    ctx.moveTo(cx - w / 2 - n, cy - h / 2);
+    ctx.lineTo(cx + w / 2 + n, cy - h / 2);
+    ctx.lineTo(cx + w / 2, cy);
+    ctx.lineTo(cx + w / 2 + n, cy + h / 2);
+    ctx.lineTo(cx - w / 2 - n, cy + h / 2);
+    ctx.lineTo(cx - w / 2, cy);
+    ctx.closePath();
+  }
+
+  // Rest ledge: a shelf across the wall.
+  function drawLedge(h, reachable) {
+    const y = sy(h.y);
+    if (y < -60 || y > H + 60) return;
+    const z = ZONES[zoneOf(gradeAt(h.y - 0.5))];
+    const x0 = sx(0.15), x1 = sx(WALL_W - 0.15), th = 0.34 * S;
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fillRect(x0 + 6, y + th * 0.5, x1 - x0 - 12, th * 0.8);
+    ctx.fillStyle = z.ledge;
+    roundRect(x0, y - th * 0.35, x1 - x0, th, 6); ctx.fill();
+    ctx.fillStyle = z.ledgeTop;
+    roundRect(x0, y - th * 0.35, x1 - x0, th * 0.32, 6); ctx.fill();
+    if (h.chalk > 0 && h.grabX != null) {
+      ctx.fillStyle = `rgba(255,255,255,${0.6 * h.chalk})`;
+      ctx.beginPath(); ctx.ellipse(sx(h.grabX), y - th * 0.22, 0.35 * S, 0.06 * S, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.font = `800 ${Math.round(th * 0.5)}px "Barlow Condensed", system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`REST LEDGE · ${Math.round(h.y - START_Y)} m`, (x0 + x1) / 2, y + th * 0.2);
+    // checkpoint flag
+    const fx = x1 - 0.35 * S;
+    ctx.strokeStyle = '#e8e2d4';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(fx, y - th * 0.35); ctx.lineTo(fx, y - th * 0.35 - 0.7 * S); ctx.stroke();
+    ctx.fillStyle = checkpoint === h ? '#5fd08a' : h.visited ? '#8a8f96' : '#ffd166';
+    ctx.beginPath();
+    ctx.moveTo(fx, y - th * 0.35 - 0.7 * S);
+    ctx.lineTo(fx - 0.38 * S, y - th * 0.35 - 0.58 * S);
+    ctx.lineTo(fx, y - th * 0.35 - 0.46 * S);
+    ctx.fill();
+    if (reachable) {
+      ctx.strokeStyle = COL.reach;
+      ctx.lineWidth = 3;
+      roundRect(x0 - 3, y - th * 0.35 - 3, x1 - x0 + 6, th + 6, 8); ctx.stroke();
     }
   }
 
@@ -1495,10 +2030,12 @@
     // holds the arc passes: likely catch targets
     for (const h of holds) {
       if (h.broken || h.type === 'foot' || h === climber.hold) continue;
-      if (pts.some(p => catchRange(h, p))) {
+      const hitP = pts.find(p => catchRange(h, p));
+      if (hitP) {
+        const q = holdPoint(h, hitP);
         ctx.strokeStyle = `rgba(${col},0.95)`;
         ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.arc(sx(h.x), sy(h.y), Math.max(h.r * S * 1.6, 18), 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(sx(q.x), sy(q.y), Math.max(h.r * S * 1.6, 18), 0, Math.PI * 2); ctx.stroke();
       }
     }
     pts.forEach((p, i) => {
@@ -1528,15 +2065,16 @@
     if (!d || d.phase !== 'fly') return;
     const h = catchableHold();
     if (!h) return;
+    const q = holdPoint(h, d.p);
     const pulse = 0.5 + 0.5 * Math.sin(time * 30);
     ctx.strokeStyle = `rgba(255,209,102,${0.6 + 0.4 * pulse})`;
     ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.arc(sx(h.x), sy(h.y), Math.max(h.r * S * 1.7, 20) + pulse * 4, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(sx(q.x), sy(q.y), Math.max(h.r * S * 1.7, 20) + pulse * 4, 0, Math.PI * 2); ctx.stroke();
     ctx.fillStyle = '#ffd166';
     ctx.font = '800 22px "Barlow Condensed", system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('TAP!', sx(h.x), sy(h.y) - Math.max(h.r * S * 1.7, 20) - 16);
+    ctx.fillText('TAP!', sx(q.x), sy(q.y) - Math.max(h.r * S * 1.7, 20) - 16);
   }
 
   function drawFloats() {
@@ -1584,7 +2122,11 @@
     drawWall();
     drawReach();
     const idle = state === 'play' && !climber.move && !climber.dyno && !press.charging;
-    for (const h of holds) drawHold(h, idle && h !== climber.hold && h.type !== 'foot' && canReach(h));
+    for (const h of holds) {
+      const reachable = idle && h.type !== 'foot' && h !== climber.hold && canReach(h);
+      if (h.type === 'ledge') drawLedge(h, reachable || (idle && h === climber.hold));
+      else drawHold(h, reachable);
+    }
     if (missFx) {
       ctx.strokeStyle = COL.danger;
       ctx.globalAlpha = 1 - missFx.t / 0.35;
@@ -1597,6 +2139,8 @@
     drawDynoPreview();
     drawCatchCue();
     drawClimber(climber);
+    drawForeground();
+    drawLighting();
     drawFloats();
     drawPumpVignette();
     if (state === 'dead') drawDead();
@@ -1636,12 +2180,31 @@
     useChalk();
   });
 
+  const hudGrade = document.getElementById('hudGrade');
+  const hudZone = document.getElementById('hudZone');
+  const hudNext = document.getElementById('hudNext');
+  const toastEl = document.getElementById('toast');
+
+  function showToast(big, sub, color) {
+    document.getElementById('toastBig').textContent = big;
+    document.getElementById('toastSub').textContent = sub || '';
+    toastEl.querySelector('.big').style.color = color || '';
+    toastEl.classList.remove('show');
+    void toastEl.offsetWidth;
+    toastEl.classList.add('show');
+  }
+
   const hudHeight = document.getElementById('hudHeight');
   const hudBest = document.getElementById('hudBest');
   function updateHud(silent) {
     hudHeight.innerHTML = `${height}<small>m</small>`;
     if (height > save.data.best) { save.data.best = height; save.write(); }
     hudBest.textContent = `BEST ${save.data.best} m`;
+    const g = Math.floor(height / GRADE_EVERY);
+    hudGrade.textContent = `V${g}`;
+    hudGrade.style.background = ZONES[zoneOf(g)].accent;
+    hudZone.textContent = ZONES[zoneOf(g)].name;
+    hudNext.style.width = `${((height - g * GRADE_EVERY) / GRADE_EVERY) * 100}%`;
     if (!silent) {
       hudHeight.classList.remove('pop');
       void hudHeight.offsetWidth;
@@ -1664,7 +2227,7 @@
 
   // Test hook (only with #debug in the URL)
   if (location.hash === '#debug') {
-    window.__crux = { get climber() { return climber; }, get holds() { return holds; }, get state() { return state; }, get press() { return press; }, sx, sy, canReach, toWorld, catchableHold: () => climber.dyno && climber.dyno.phase === 'fly' ? catchableHold() : null };
+    window.__crux = { get climber() { return climber; }, get holds() { return holds; }, get state() { return state; }, get press() { return press; }, cam, sx, sy, canReach, toWorld, catchableHold: () => climber.dyno && climber.dyno.phase === 'fly' ? catchableHold() : null };
   }
 
   resize();
