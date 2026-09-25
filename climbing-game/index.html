@@ -3,21 +3,30 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#1b2530">
 <title>Crux Climb</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,800&display=swap">
 <style>
+  /* ================= Base ================= */
   :root {
     color-scheme: dark;
-    --rock: #39414a;
-    --ink: #f3efe7;
+    --ink: #fbf7ef;
+    --muted: rgba(251, 247, 239, 0.72);
+    --panel: rgba(16, 22, 30, 0.74);
+    --accent: #ffb238;
+    --accent-ink: #2b1a00;
+    --danger: #ff5a44;
+    --good: #5fd08a;
+    --font: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
   }
   html, body {
     margin: 0;
     height: 100%;
     overflow: hidden;
-    background: var(--rock);
+    background: #1b2530;
     color: var(--ink);
+    font-family: var(--font);
     overscroll-behavior: none;
     touch-action: none;
     -webkit-user-select: none;
@@ -31,429 +40,843 @@
     display: block;
     touch-action: none;
   }
-  #safe {
+
+  /* ================= HUD ================= */
+  .hud {
     position: fixed;
-    visibility: hidden;
+    top: 0; left: 0; right: 0;
+    padding: calc(env(safe-area-inset-top, 0px) + 10px) 12px 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
     pointer-events: none;
-    padding-top: env(safe-area-inset-top, 0px);
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .score {
+    background: var(--panel);
+    border-radius: 14px;
+    padding: 6px 14px 8px;
+    min-width: 96px;
+  }
+  .score .height {
+    font-weight: 800;
+    font-size: 44px;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    display: inline-block;
+    transform-origin: left center;
+  }
+  .score .height small { font-size: 24px; margin-left: 2px; }
+  .score .best {
+    font-weight: 600;
+    font-size: 16px;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .pop { animation: pop 0.28s ease-out; }
+  @keyframes pop {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.22); }
+    100% { transform: scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pop { animation: none; }
   }
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
-<div id="safe"></div>
+
+<div class="hud" id="hud">
+  <div class="score">
+    <div class="height" id="hudHeight">0<small>m</small></div>
+    <div class="best" id="hudBest">BEST 0 m</div>
+  </div>
+</div>
+
 <script>
 (() => {
   'use strict';
 
-  // ---------- Palette & tuning ----------
-  const C = {
-    rock: '#39414a',
-    rockLight: '#4a535d',
-    rockDark: '#2c333b',
-    jug: '#f0a93b',
-    jugShade: '#b9771c',
-    climber: '#f3efe7',
-    reach: '#5fc4b8',
-    danger: '#e5533d',
-    ground: '#23292f',
+  // =====================================================================
+  // 1. CONFIG
+  // =====================================================================
+  const WALL_W = 7.5;                        // world width in metres
+  const X_MIN = 1.3, X_MAX = WALL_W - 1.3;   // where holds may sit
+  const REACH = 2.5;                         // static reach, hands to hold
+  const START_Y = 2.2;                       // height of the first hold
+  const GRAVITY = 20;
+
+  // Climber proportions in metres
+  const BODY = {
+    upper: 0.33, fore: 0.31, torso: 0.52,
+    thigh: 0.43, shin: 0.43,
+    shoulderW: 0.19, hipW: 0.11, head: 0.15,
   };
-  const FONT = '"Barlow Condensed", "Arial Narrow", system-ui, sans-serif';
+  const ARM = BODY.upper + BODY.fore;
+  const LEG = BODY.thigh + BODY.shin;
+  const HANG = 1.0;                          // hip sits this far below the hands
 
-  const WALL_W = 10;        // wall width in world units (1 unit = 1 metre)
-  const REACH = 3.2;        // how far the climber can reach from their current hold
-  const MOVE_TIME = 0.28;   // seconds for a normal move
-  const GRAVITY = 30;       // units / s^2 when falling
-  const START_Y = 2;        // height of the first hold
+  const COL = {
+    skin: '#e2a47f', skinShade: '#b9785a',
+    shirt: '#17a398', shirtShade: '#0f776e',
+    pants: '#2e3a5c', pantsShade: '#222b45',
+    shoe: '#ec5a3f', sole: '#2a1c19',
+    helmet: '#ff8a1f', helmetShade: '#c9630a',
+    harness: '#f5c531',
+    bag: '#f1eadb', bagRim: '#34343e',
+    chalk: '#ffffff',
+    jug: '#ffb238', jugShade: '#c27a12',
+    reach: '#7fe0d4',
+    danger: '#ff5a44',
+    rock: '#39414a', rockLight: '#4a535d', rockDark: '#2c333b',
+    sky: '#8fc9ea',
+  };
 
-  // ---------- Canvas & scaling ----------
+  // =====================================================================
+  // 2. HELPERS
+  // =====================================================================
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
+  const easeOut = t => 1 - Math.pow(1 - t, 3);
+  const easeInOut = t => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+  const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+  const vcopy = p => ({ x: p.x, y: p.y });
+
+  // Clamp point p so it sits no farther than len from origin o.
+  function reachClamp(o, p, len) {
+    const dx = p.x - o.x, dy = p.y - o.y, d = Math.hypot(dx, dy);
+    if (d <= len) return { x: p.x, y: p.y };
+    return { x: o.x + (dx / d) * len, y: o.y + (dy / d) * len };
+  }
+
+  // Two-bone IK: returns the middle joint (elbow/knee) between root a and tip t.
+  // bend = +1 bends counter-clockwise, -1 clockwise (in world space, y up).
+  function ik(a, t, l1, l2, bend) {
+    const dx = t.x - a.x, dy = t.y - a.y;
+    const d = clamp(Math.hypot(dx, dy), 0.0001, l1 + l2 - 0.0001);
+    const cosA = clamp((l1 * l1 + d * d - l2 * l2) / (2 * l1 * d), -1, 1);
+    const ang = Math.atan2(dy, dx) + bend * Math.acos(cosA);
+    return { x: a.x + Math.cos(ang) * l1, y: a.y + Math.sin(ang) * l1 };
+  }
+
+  // =====================================================================
+  // 3. STORAGE
+  // =====================================================================
+  const STORE_KEY = 'crux.v2';
+  const save = (() => {
+    const defaults = { best: 0 };
+    let data = { ...defaults };
+    try {
+      const raw = localStorage.getItem(STORE_KEY);
+      if (raw) data = { ...defaults, ...JSON.parse(raw) };
+      else {
+        const old = parseInt(localStorage.getItem('crux-best') || '0', 10);
+        if (old > 0) data.best = old;
+      }
+    } catch (e) { /* storage unavailable */ }
+    return {
+      data,
+      write() {
+        try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch (e) { /* ignore */ }
+      },
+    };
+  })();
+
+  // =====================================================================
+  // 4. CANVAS, SCALING & CAMERA
+  // =====================================================================
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
-  const safeEl = document.getElementById('safe');
-  let W = 0, H = 0, DPR = 1, S = 1; // S = pixels per world unit
-  let safeTop = 0, safeBottom = 0;
-  let texture = null;
+  let W = 0, H = 0, DPR = 1, S = 1, OX = 0;   // S = px per metre, OX = world x offset
+  const cam = { y: 0 };
+  let wallPattern = null, wallTile = 256;
 
   function resize() {
-    DPR = Math.min(window.devicePixelRatio || 1, 3);
+    DPR = Math.min(window.devicePixelRatio || 1, 2.5);
     W = window.innerWidth;
     H = window.innerHeight;
     canvas.width = Math.round(W * DPR);
     canvas.height = Math.round(H * DPR);
     canvas.style.width = W + 'px';
     canvas.style.height = H + 'px';
-    S = W / WALL_W;
-    const cs = getComputedStyle(safeEl);
-    safeTop = parseFloat(cs.paddingTop) || 0;
-    safeBottom = parseFloat(cs.paddingBottom) || 0;
-    buildTexture();
+    S = Math.min(W / WALL_W, H / 11);        // wide screens: keep ~11 m visible
+    OX = (W - WALL_W * S) / 2;
+    buildWallTexture();
   }
 
-  // A tile of speckles and cracks, repeated and scrolled with the camera.
-  function buildTexture() {
-    const size = Math.max(128, Math.round(W * DPR));
+  const sx = x => OX + x * S;
+  const sy = y => H - (y - cam.y) * S;
+  const toWorld = (px, py) => ({ x: (px - OX) / S, y: cam.y + (H - py) / S });
+
+  // Wall silhouette: how far the rock edge sits in from each side (metres).
+  const edgeL = y => 0.6 + 0.22 * Math.sin(y * 0.41 + 1.3) + 0.12 * Math.sin(y * 1.27) + 0.06 * Math.sin(y * 3.1 + 0.7);
+  const edgeR = y => 0.6 + 0.22 * Math.sin(y * 0.37 + 4.1) + 0.12 * Math.sin(y * 1.19 + 2.2) + 0.06 * Math.sin(y * 2.9 + 2.1);
+
+  function buildWallTexture() {
+    wallTile = Math.round(3 * S);             // one tile = 3 m
+    const size = Math.round(wallTile * DPR);
     const t = document.createElement('canvas');
     t.width = size; t.height = size;
     const g = t.getContext('2d');
-    g.fillStyle = C.rock;
+    g.fillStyle = COL.rock;
     g.fillRect(0, 0, size, size);
-    let seed = 7;
+    let seed = 11;
     const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-    for (let i = 0; i < size * 1.2; i++) {
-      g.fillStyle = rnd() < 0.5 ? C.rockLight : C.rockDark;
+    for (let i = 0; i < size * 1.4; i++) {
+      g.fillStyle = rnd() < 0.5 ? COL.rockLight : COL.rockDark;
       g.globalAlpha = 0.25 + rnd() * 0.35;
-      const r = (0.6 + rnd() * 2.2) * DPR;
       g.beginPath();
-      g.arc(rnd() * size, rnd() * size, r, 0, Math.PI * 2);
+      g.arc(rnd() * size, rnd() * size, (0.6 + rnd() * 2.2) * DPR, 0, Math.PI * 2);
       g.fill();
     }
-    g.globalAlpha = 0.22;
-    g.strokeStyle = C.rockDark;
-    g.lineWidth = 1.5 * DPR;
-    for (let i = 0; i < 5; i++) {
-      let x = rnd() * size, y = rnd() * size;
-      g.beginPath();
-      g.moveTo(x, y);
-      for (let k = 0; k < 6; k++) {
-        x += (rnd() - 0.5) * size * 0.18;
-        y += rnd() * size * 0.12;
-        g.lineTo(x, y);
-      }
-      g.stroke();
-    }
     g.globalAlpha = 1;
-    texture = t;
+    wallPattern = ctx.createPattern(t, 'repeat');
   }
 
-  // ---------- Helpers ----------
-  const rand = (a, b) => a + Math.random() * (b - a);
-  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-  const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
-  const easeOut = t => 1 - Math.pow(1 - t, 3);
-
-  function loadBest() {
-    try { return parseInt(localStorage.getItem('crux-best') || '0', 10) || 0; } catch (e) { return 0; }
-  }
-  function saveBest(v) {
-    try { localStorage.setItem('crux-best', String(v)); } catch (e) { /* storage unavailable */ }
-  }
-
-  // ---------- World ----------
-  // World y grows upward. camY is the world height at the bottom edge of the screen.
+  // =====================================================================
+  // 5. WORLD: HOLDS
+  // =====================================================================
   let holds = [];
-  let genY = 0, genX = 5;
-  let camY = 0;
-  let climber = null;
-  let state = 'climbing'; // climbing | falling | dead
-  let height = 0, best = loadBest();
-  let deadAt = 0;
-  let missFx = null;   // brief ring where a tap found nothing
+  const gen = { y: 0, x: 0 };
 
-  function toScreenX(x) { return x * S; }
-  function toScreenY(y) { return H - (y - camY) * S; }
-  function toWorld(px, py) { return { x: px / S, y: camY + (H - py) / S }; }
-
-  function addHold(x, y) {
-    holds.push({ x, y, r: rand(0.38, 0.5), rot: rand(0, Math.PI), type: 'jug' });
+  function addHold(x, y, type = 'jug') {
+    const h = { x, y, type, r: rand(0.3, 0.38), rot: rand(-0.5, 0.5), chalk: 0 };
+    holds.push(h);
+    return h;
   }
 
-  // Build a guaranteed route (each hold within reach of the last) plus scattered extras.
   function generate(upTo) {
-    while (genY < upTo) {
-      const gap = rand(1.3, 2.1);
-      const nx = clamp(genX + rand(-2.2, 2.2), 1, WALL_W - 1);
-      genY += gap;
-      addHold(nx, genY);
-      genX = nx;
-      // Extra holds so there's more than one way up.
-      for (let i = 0; i < 2; i++) {
-        if (Math.random() < 0.6) {
-          const ex = rand(1, WALL_W - 1), ey = genY + rand(-0.8, 0.8);
-          if (!holds.some(h => dist(h.x, h.y, ex, ey) < 1.3)) addHold(ex, ey);
-        }
+    while (gen.y < upTo) {
+      const gap = rand(1.2, 1.9);
+      const nx = clamp(gen.x + rand(-1.4, 1.4), X_MIN, X_MAX);
+      gen.y += gap;
+      addHold(nx, gen.y);
+      gen.x = nx;
+      if (Math.random() < 0.6) {
+        const ex = rand(X_MIN, X_MAX), ey = gen.y + rand(-0.7, 0.7);
+        if (!holds.some(h => dist(h.x, h.y, ex, ey) < 1.1)) addHold(ex, ey);
       }
     }
   }
+
+  // Where each hand sits on a hold.
+  function gripPoints(h) {
+    return [{ x: h.x - 0.09, y: h.y + 0.02 }, { x: h.x + 0.09, y: h.y + 0.02 }];
+  }
+
+  // =====================================================================
+  // 6. CLIMBER RIG
+  // The climber is solved every frame from a few driven targets:
+  //   hip (spring-follows a target), hand targets, foot targets.
+  // Shoulders/hips hang off the torso, and elbows/knees come from 2-bone IK.
+  // Hands and feet are clamped to limb length, so limbs never detach.
+  // =====================================================================
+  let climber = null;
+
+  function makeClimber(hold) {
+    const hands = gripPoints(hold);
+    const hip = { x: hold.x, y: hold.y - HANG };
+    const c = {
+      hold,
+      handT: hands.map(vcopy),                // where each hand wants to be
+      footT: [{ x: hip.x - 0.3, y: hip.y - 0.75 }, { x: hip.x + 0.3, y: hip.y - 0.75 }],
+      footHold: [null, null],
+      hip, hipV: { x: 0, y: 0 }, hipT: vcopy(hip),
+      k: 160, damp: 22,                       // hip spring
+      move: null,                             // active reach
+      footMoves: [null, null],
+      restT: 0,                               // time resting still on a hold
+      shake: null, shakeCd: 1.2, nextShakeHand: 1,
+      pose: 'hang',                           // hang | fall
+      rot: 0, rotV: 0,
+      pump: 0,                                // 0..100 (used by later systems)
+      j: null,                                // solved joints
+    };
+    placeFeet(c, true);
+    return c;
+  }
+
+  // Choose a foothold (or a smear on the wall) for each foot below the hip.
+  function pickFoot(c, side, hip) {
+    const s = side ? 1 : -1;
+    const ideal = { x: hip.x + s * 0.3, y: hip.y - 0.74 };
+    const root = { x: hip.x + s * BODY.hipW, y: hip.y };
+    let best = null, bestD = 0.8;
+    for (const h of holds) {
+      if (h === c.hold || h === c.footHold[1 - side]) continue;
+      const top = { x: h.x, y: h.y + h.r * 0.45 };
+      if (top.y > hip.y - 0.3) continue;
+      if (dist(root.x, root.y, top.x, top.y) > LEG * 0.96) continue;
+      const d = dist(top.x, top.y, ideal.x, ideal.y);
+      if (d < bestD) { bestD = d; best = h; }
+    }
+    if (best) return { hold: best, p: { x: best.x + s * 0.05, y: best.y + best.r * 0.45 } };
+    return { hold: null, p: ideal };
+  }
+
+  function placeFeet(c, instant, hipAt) {
+    const hip = hipAt || c.hipT;
+    for (let side = 0; side < 2; side++) {
+      const f = pickFoot(c, side, hip);
+      c.footHold[side] = f.hold;
+      if (instant) c.footT[side] = f.p;
+      else c.footMoves[side] = { t: -side * 0.09, dur: 0.2, from: vcopy(c.footT[side]), to: f.p };
+    }
+  }
+
+  function hangTarget(c, hands) {
+    const hm = mid(hands[0], hands[1]);
+    return { x: hm.x, y: hm.y - HANG };
+  }
+
+  // Start a static move to hold h. The body loads, the lead hand reaches,
+  // the hip shifts under the new hold, the trailing hand matches, then feet step up.
+  function startReach(c, h) {
+    const to = gripPoints(h);
+    const from = c.handT.map(vcopy);
+    const hm = mid(from[0], from[1]);
+    const lead = Math.abs(h.x - hm.x) < 0.15 ? c.nextShakeHand : (h.x < hm.x ? 0 : 1);
+    const d = dist(hm.x, hm.y, h.x, h.y);
+    c.move = {
+      t: 0, dur: 0.34 + d * 0.06, hold: h, lead, from, to,
+      hipFrom: vcopy(c.hipT), hipTo: hangTarget(c, to), feetDone: false,
+    };
+    c.hold = null;
+    c.shake = null;
+    c.restT = 0;
+  }
+
+  function updateClimber(c, dt, time) {
+    // --- Scripted reach ---
+    if (c.move) {
+      const m = c.move;
+      m.t += dt / m.dur;
+      const u = Math.min(1, m.t);
+      const trail = 1 - m.lead;
+
+      // Lead hand travels 0.08..0.7 on a small outward arc
+      const lu = clamp((u - 0.08) / 0.62, 0, 1), le = easeInOut(lu);
+      c.handT[m.lead] = {
+        x: lerp(m.from[m.lead].x, m.to[m.lead].x, le),
+        y: lerp(m.from[m.lead].y, m.to[m.lead].y, le) + Math.sin(lu * Math.PI) * 0.18,
+      };
+      // Trailing hand matches 0.7..1
+      const tu = clamp((u - 0.7) / 0.3, 0, 1), te = easeInOut(tu);
+      c.handT[trail] = {
+        x: lerp(m.from[trail].x, m.to[trail].x, te),
+        y: lerp(m.from[trail].y, m.to[trail].y, te) + Math.sin(tu * Math.PI) * 0.12,
+      };
+      // Hip: small load (dip) then drives toward the new hang position
+      const hu = easeOut(clamp(u * 1.15, 0, 1));
+      const dip = Math.sin(clamp(u / 0.25, 0, 1) * Math.PI) * 0.1;
+      c.hipT = {
+        x: lerp(m.hipFrom.x, m.hipTo.x, hu),
+        y: lerp(m.hipFrom.y, m.hipTo.y, hu) - dip,
+      };
+      c.k = 260; c.damp = 30;
+      if (!m.feetDone && u > 0.72) { m.feetDone = true; placeFeet(c, false, m.hipTo); }
+      if (u >= 1) {
+        c.move = null;
+        c.handT = m.to.map(vcopy);
+        c.hold = m.hold;
+        c.hold.chalk = Math.min(1, c.hold.chalk + 0.6);
+        onGrab(c.hold);
+      }
+    } else if (c.pose === 'hang' && c.hold) {
+      // --- Resting on a hold: settle, breathe, shake out a hand ---
+      c.restT += dt;
+      c.k = 120; c.damp = 16;
+      const grips = gripPoints(c.hold);
+      c.hipT = hangTarget(c, grips);
+      c.shakeCd -= dt;
+      if (!c.shake && c.restT > 1.4 && c.shakeCd <= 0) {
+        c.shake = { hand: c.nextShakeHand, t: 0, dur: 1.5 };
+        c.nextShakeHand = 1 - c.nextShakeHand;
+      }
+      if (c.shake) {
+        c.shake.t += dt;
+        // lean away from the shaking hand
+        c.hipT.x += (c.shake.hand ? -1 : 1) * 0.1;
+        if (c.shake.t >= c.shake.dur) { c.shake = null; c.shakeCd = rand(1.8, 3.2); }
+      }
+    }
+
+    // --- Feet stepping ---
+    for (let s = 0; s < 2; s++) {
+      const fm = c.footMoves[s];
+      if (!fm) continue;
+      fm.t += dt / fm.dur;
+      const u = clamp(fm.t, 0, 1), e = easeInOut(u);
+      c.footT[s] = {
+        x: lerp(fm.from.x, fm.to.x, e) + (s ? 1 : -1) * Math.sin(u * Math.PI) * 0.08,
+        y: lerp(fm.from.y, fm.to.y, e) + Math.sin(u * Math.PI) * 0.16,
+      };
+      if (fm.t >= 1) c.footMoves[s] = null;
+    }
+
+    // --- Falling pose ---
+    if (c.pose === 'fall') {
+      c.hipV.y -= GRAVITY * dt;
+      c.hip.x += c.hipV.x * dt;
+      c.hip.y += c.hipV.y * dt;
+      c.rot += c.rotV * dt;
+    } else {
+      // --- Hip spring ---
+      const ax = c.k * (c.hipT.x - c.hip.x) - c.damp * c.hipV.x;
+      const ay = c.k * (c.hipT.y - c.hip.y) - c.damp * c.hipV.y;
+      c.hipV.x += ax * dt; c.hipV.y += ay * dt;
+      c.hip.x += c.hipV.x * dt; c.hip.y += c.hipV.y * dt;
+    }
+
+    solveRig(c, time);
+  }
+
+  // Build every joint position for drawing.
+  function solveRig(c, time) {
+    const hip = c.hip;
+    const tremble = clamp((c.pump - 45) / 55, 0, 1);       // arms shake when pumped
+    const jit = (f, p) => Math.sin(time * f + p) * Math.sin(time * f * 0.37 + p * 2.1);
+
+    // Torso direction: lean toward the hands, or spin when falling
+    let dir;
+    if (c.pose === 'fall') {
+      dir = { x: -Math.sin(c.rot), y: Math.cos(c.rot) };
+    } else {
+      const hm = mid(c.handT[0], c.handT[1]);
+      let dx = hm.x - hip.x, dy = hm.y - hip.y;
+      const d = Math.hypot(dx, dy) || 1;
+      dx = (dx / d) * 0.65; dy = (dy / d) * 0.65 + 0.35;
+      const n = Math.hypot(dx, dy);
+      dir = { x: dx / n, y: dy / n };
+    }
+    const right = { x: dir.y, y: -dir.x };
+    const breath = Math.sin(time * 2.3) * 0.014;
+    const chest = {
+      x: hip.x + dir.x * (BODY.torso + breath) + jit(31, 1) * 0.012 * tremble,
+      y: hip.y + dir.y * (BODY.torso + breath),
+    };
+    const sh = [
+      { x: chest.x - right.x * BODY.shoulderW, y: chest.y - right.y * BODY.shoulderW + breath * 0.5 },
+      { x: chest.x + right.x * BODY.shoulderW, y: chest.y + right.y * BODY.shoulderW + breath * 0.5 },
+    ];
+    const hp = [
+      { x: hip.x - right.x * BODY.hipW, y: hip.y - right.y * BODY.hipW },
+      { x: hip.x + right.x * BODY.hipW, y: hip.y + right.y * BODY.hipW },
+    ];
+
+    // Hands
+    const hands = [], elbows = [];
+    for (let i = 0; i < 2; i++) {
+      const s = i ? 1 : -1;
+      let t;
+      if (c.pose === 'fall') {
+        const flail = Math.sin(time * 14 + i * 2) * 0.35;
+        t = {
+          x: sh[i].x + dir.x * 0.4 + right.x * s * (0.45 + flail),
+          y: sh[i].y + dir.y * 0.4 + right.y * s * (0.45 + flail),
+        };
+      } else {
+        t = vcopy(c.handT[i]);
+        if (c.shake && c.shake.hand === i) {
+          // drop the hand to the side and flick it
+          const k = c.shake.t, w = Math.min(1, k / 0.25, (c.shake.dur - k) / 0.25);
+          const down = { x: sh[i].x + s * 0.16 + Math.sin(time * 26) * 0.06, y: sh[i].y - ARM * 0.9 };
+          t = { x: lerp(t.x, down.x, w), y: lerp(t.y, down.y, w) };
+        }
+        t.x += jit(47 + i * 5, i) * 0.035 * tremble;
+        t.y += jit(39 + i * 7, i + 3) * 0.025 * tremble;
+      }
+      const hnd = reachClamp(sh[i], t, ARM * 0.999);
+      hands.push(hnd);
+      const el = ik(sh[i], hnd, BODY.upper, BODY.fore, i ? -1 : 1);
+      el.x += jit(23 + i * 3, i + 5) * 0.03 * tremble;
+      elbows.push(el);
+    }
+
+    // Feet
+    const feet = [], knees = [];
+    for (let i = 0; i < 2; i++) {
+      const s = i ? 1 : -1;
+      let t;
+      if (c.pose === 'fall') {
+        const kick = Math.sin(time * 11 + i * 2.5) * 0.3;
+        t = {
+          x: hp[i].x - dir.x * 0.75 + right.x * s * (0.25 + kick),
+          y: hp[i].y - dir.y * 0.75 + right.y * s * (0.25 + kick),
+        };
+      } else {
+        t = c.footT[i];
+      }
+      const ft = reachClamp(hp[i], t, LEG * 0.999);
+      feet.push(ft);
+      knees.push(ik(hp[i], ft, BODY.thigh, BODY.shin, i ? 1 : -1));
+    }
+
+    const head = { x: chest.x + dir.x * 0.25, y: chest.y + dir.y * 0.25 };
+    c.j = { hip, chest, dir, right, sh, hp, hands, elbows, feet, knees, head };
+  }
+
+  // =====================================================================
+  // 7. GAME STATE & INPUT
+  // =====================================================================
+  let state = 'play';           // play | falling | dead
+  let height = 0, time = 0, deadAt = 0;
+  let missFx = null;
 
   function reset() {
     holds = [];
-    genY = START_Y; genX = 5;
-    addHold(5, START_Y);
-    generate(START_Y + 40);
-    climber = {
-      hold: holds[0],
-      x: 5, y: START_Y,
-      fromX: 5, fromY: START_Y,
-      toX: 5, toY: START_Y,
-      t: 1, moving: false, lunge: false,
-      vy: 0, sway: 0,
-    };
-    camY = START_Y - (H * 0.35) / S;
+    gen.y = START_Y; gen.x = WALL_W / 2;
+    const first = addHold(WALL_W / 2, START_Y);
+    first.r = 0.38;
+    generate(START_Y + 30);
+    climber = makeClimber(first);
+    cam.y = START_Y - (H * 0.4) / S;
     height = 0;
-    state = 'climbing';
+    state = 'play';
     missFx = null;
+    updateHud(true);
   }
 
-  // ---------- Input ----------
+  function onGrab() { /* hooks for sound/particles in later steps */ }
+
+  function handsMid() { return mid(climber.handT[0], climber.handT[1]); }
+
+  function holdAt(p) {
+    const tol = Math.max(0.55, 26 / S);
+    let target = null, bestD = Infinity;
+    for (const h of holds) {
+      const d = dist(h.x, h.y, p.x, p.y);
+      if (d < tol + h.r && d < bestD) { bestD = d; target = h; }
+    }
+    return target;
+  }
+
+  function canReach(h) {
+    const hm = handsMid();
+    return dist(hm.x, hm.y, h.x, h.y) <= REACH;
+  }
+
   function onTap(px, py) {
     if (state === 'dead') {
       if (performance.now() - deadAt > 600) reset();
       return;
     }
-    if (state !== 'climbing' || climber.moving) return;
-
+    if (state !== 'play' || climber.move) return;
     const p = toWorld(px, py);
-    const tol = Math.max(0.9, 30 / S); // generous thumb target
-    let target = null, bestD = Infinity;
-    for (const h of holds) {
-      if (h === climber.hold) continue;
-      const d = dist(h.x, h.y, p.x, p.y);
-      if (d < tol + h.r && d < bestD) { bestD = d; target = h; }
-    }
-    if (!target) {
-      missFx = { x: p.x, y: p.y, t: 0 };
-      return;
-    }
+    const h = holdAt(p);
+    if (!h || h === climber.hold) { missFx = { x: p.x, y: p.y, t: 0 }; return; }
+    if (canReach(h)) startReach(climber, h);
+    else startFall();
+  }
 
-    const d = dist(climber.x, climber.y, target.x, target.y);
-    climber.fromX = climber.x; climber.fromY = climber.y;
-    climber.t = 0; climber.moving = true;
-    if (d <= REACH) {
-      climber.lunge = false;
-      climber.toX = target.x; climber.toY = target.y;
-      climber.hold = target;
-    } else {
-      // Too far: lunge toward it, come up short, and fall.
-      climber.lunge = true;
-      const k = (REACH * 0.85) / d;
-      climber.toX = climber.x + (target.x - climber.x) * k;
-      climber.toY = climber.y + (target.y - climber.y) * k;
-      climber.hold = null;
-    }
+  function startFall() {
+    state = 'falling';
+    const c = climber;
+    c.pose = 'fall';
+    c.hold = null;
+    c.move = null;
+    c.hipV = { x: rand(-1.2, 1.2), y: 2.5 };
+    c.rotV = rand(-5, 5);
   }
 
   canvas.addEventListener('pointerdown', e => {
     e.preventDefault();
     onTap(e.clientX, e.clientY);
   });
-  // Block pinch-zoom, double-tap zoom, and scrolling gestures.
+  // Block pinch-zoom, double-tap zoom and scroll gestures.
   ['touchstart', 'touchmove', 'gesturestart', 'dblclick'].forEach(ev =>
-    document.addEventListener(ev, e => e.preventDefault(), { passive: false }));
+    document.addEventListener(ev, e => { if (e.target === canvas || ev !== 'touchstart') e.preventDefault(); }, { passive: false }));
   window.addEventListener('resize', resize);
 
-  // ---------- Update ----------
+  // =====================================================================
+  // 8. UPDATE
+  // =====================================================================
   function update(dt) {
+    time += dt;
     if (missFx) { missFx.t += dt; if (missFx.t > 0.35) missFx = null; }
 
-    if (state === 'climbing') {
-      if (climber.moving) {
-        climber.t = Math.min(1, climber.t + dt / MOVE_TIME);
-        const e = easeOut(climber.t);
-        const arc = Math.sin(climber.t * Math.PI) * 0.25;
-        climber.x = climber.fromX + (climber.toX - climber.fromX) * e;
-        climber.y = climber.fromY + (climber.toY - climber.fromY) * e + arc;
-        climber.sway = (climber.toX - climber.fromX) * 0.15 * (1 - climber.t);
-        if (climber.t >= 1) {
-          climber.moving = false;
-          climber.x = climber.toX; climber.y = climber.toY;
-          if (climber.lunge) startFall();
-        }
-      } else {
-        climber.sway *= 0.9;
-      }
-      height = Math.max(height, Math.floor(climber.y - START_Y));
-      if (height > best) { best = height; saveBest(best); }
+    updateClimber(climber, dt, time);
 
-      // Camera keeps the climber about 65% down the screen.
-      const target = climber.y - (H * 0.35) / S;
-      camY += (target - camY) * Math.min(1, dt * 5);
-
-      generate(camY + H / S + 10);
-      holds = holds.filter(h => h.y > camY - 4 || h === climber.hold);
+    if (state === 'play') {
+      const h = Math.max(height, Math.floor(climber.hip.y + HANG - START_Y));
+      if (h > height) { height = h; updateHud(); }
+      const target = climber.hip.y - (H * 0.36) / S;
+      cam.y += (target - cam.y) * Math.min(1, dt * 4);
+      generate(cam.y + H / S + 10);
+      holds = holds.filter(h => h.y > cam.y - 4 || h === climber.hold);
     } else if (state === 'falling') {
-      climber.vy -= GRAVITY * dt;
-      climber.y += climber.vy * dt;
-      climber.sway += dt * 6;
-      if (toScreenY(climber.y + 1) > H + 40) {
+      if (sy(climber.hip.y + 2) > H + 40) {
         state = 'dead';
         deadAt = performance.now();
       }
     }
   }
 
-  function startFall() {
-    state = 'falling';
-    climber.vy = 2;
-    climber.hold = null;
+  // =====================================================================
+  // 9. DRAW: WORLD
+  // =====================================================================
+  function drawSky() {
+    ctx.fillStyle = COL.sky;
+    ctx.fillRect(0, 0, W, H);
   }
 
-  // ---------- Draw ----------
+  function wallPath() {
+    const top = cam.y + H / S + 1, bot = cam.y - 1;
+    ctx.beginPath();
+    for (let y = bot; y <= top; y += 0.25) ctx.lineTo(sx(edgeL(y)), sy(y));
+    for (let y = top; y >= bot; y -= 0.25) ctx.lineTo(sx(WALL_W - edgeR(y)), sy(y));
+    ctx.closePath();
+  }
+
   function drawWall() {
-    const tile = texture.width / DPR; // tile size in CSS px
-    const offset = ((camY * S) % tile + tile) % tile;
-    for (let y = -tile + offset; y < H; y += tile) {
-      for (let x = 0; x < W; x += tile) {
-        ctx.drawImage(texture, x, y, tile, tile);
-      }
-    }
-    // Ground at height 0
-    const gy = toScreenY(0);
+    ctx.save();
+    wallPath();
+    const ty = ((H + cam.y * S) % wallTile + wallTile) % wallTile;
+    wallPattern.setTransform(new DOMMatrix().translate(OX, ty).scale(1 / DPR));
+    ctx.fillStyle = wallPattern;
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+    ctx.stroke();
+    ctx.restore();
+    const gy = sy(0);
     if (gy < H) {
-      ctx.fillStyle = C.ground;
+      ctx.fillStyle = '#3f6b3a';
       ctx.fillRect(0, gy, W, H - gy);
     }
   }
 
   function drawHold(h, reachable) {
-    const x = toScreenX(h.x), y = toScreenY(h.y), r = h.r * S;
-    if (y < -r * 2 || y > H + r * 2) return;
+    const x = sx(h.x), y = sy(h.y), r = h.r * S;
+    if (y < -r * 3 || y > H + r * 3) return;
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(h.rot);
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.beginPath(); ctx.ellipse(r * 0.12, r * 0.18, r * 1.05, r * 0.8, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = C.jugShade;
-    ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.78, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = C.jug;
-    ctx.beginPath(); ctx.ellipse(-r * 0.08, -r * 0.1, r * 0.82, r * 0.6, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.beginPath(); ctx.arc(r * 0.2, r * 0.05, r * 0.14, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath(); ctx.ellipse(r * 0.12, r * 0.2, r * 1.05, r * 0.82, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = COL.jugShade;
+    ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.8, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = COL.jug;
+    ctx.beginPath(); ctx.ellipse(-r * 0.06, -r * 0.12, r * 0.84, r * 0.6, 0, 0, Math.PI * 2); ctx.fill();
+    if (h.chalk > 0) {
+      ctx.fillStyle = `rgba(255,255,255,${0.55 * h.chalk})`;
+      ctx.beginPath(); ctx.ellipse(-r * 0.1, -r * 0.3, r * 0.5, r * 0.22, 0, 0, Math.PI * 2); ctx.fill();
+    }
     ctx.restore();
     if (reachable) {
-      ctx.strokeStyle = C.reach;
+      ctx.strokeStyle = COL.reach;
       ctx.lineWidth = 2.5;
-      ctx.beginPath(); ctx.arc(x, y, r * 1.35, 0, Math.PI * 2); ctx.stroke();
-    }
-  }
-
-  function drawClimber() {
-    const hx = toScreenX(climber.x), hy = toScreenY(climber.y);
-    const u = S; // scale limbs to world units
-    const sway = climber.sway * u;
-    const falling = state !== 'climbing';
-    const shoulderY = hy + 1.05 * u, hipY = hy + 2.0 * u;
-    const bodyX = hx + sway;
-
-    ctx.strokeStyle = C.climber;
-    ctx.fillStyle = C.climber;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = Math.max(3, u * 0.14);
-
-    ctx.beginPath();
-    if (falling) {
-      // Arms flailing above the head
-      const f = Math.sin(climber.sway * 3) * 0.4 * u;
-      ctx.moveTo(bodyX, shoulderY); ctx.lineTo(bodyX - 0.6 * u + f, shoulderY - 0.9 * u);
-      ctx.moveTo(bodyX, shoulderY); ctx.lineTo(bodyX + 0.6 * u - f, shoulderY - 0.9 * u);
-    } else {
-      ctx.moveTo(bodyX, shoulderY); ctx.lineTo(hx - 0.14 * u, hy);
-      ctx.moveTo(bodyX, shoulderY); ctx.lineTo(hx + 0.14 * u, hy);
-    }
-    // Torso
-    ctx.moveTo(bodyX, shoulderY); ctx.lineTo(bodyX + sway * 0.4, hipY);
-    // Legs: bent, feet smearing the wall
-    const kx = 0.45 * u, fx = 0.35 * u;
-    ctx.moveTo(bodyX + sway * 0.4, hipY); ctx.lineTo(bodyX - kx, hipY + 0.45 * u); ctx.lineTo(bodyX - fx, hipY + 0.95 * u);
-    ctx.moveTo(bodyX + sway * 0.4, hipY); ctx.lineTo(bodyX + kx, hipY + 0.45 * u); ctx.lineTo(bodyX + fx, hipY + 0.95 * u);
-    ctx.stroke();
-
-    // Head
-    ctx.beginPath();
-    ctx.arc(bodyX, shoulderY - 0.25 * u, 0.24 * u, 0, Math.PI * 2);
-    ctx.fill();
-    // Hands
-    if (!falling) {
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(hx - 0.14 * u, hy, 0.1 * u, 0, Math.PI * 2);
-      ctx.arc(hx + 0.14 * u, hy, 0.1 * u, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.beginPath(); ctx.arc(x, y, r * 1.45, 0, Math.PI * 2); ctx.stroke();
     }
   }
 
   function drawReach() {
-    if (state !== 'climbing' || climber.moving) return;
+    if (state !== 'play' || climber.move) return;
+    const hm = handsMid();
     ctx.save();
-    ctx.strokeStyle = C.reach;
-    ctx.globalAlpha = 0.28;
-    ctx.setLineDash([6, 8]);
+    ctx.strokeStyle = COL.reach;
+    ctx.globalAlpha = 0.35;
     ctx.lineWidth = 2;
+    ctx.setLineDash([2, 9]);
+    ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.arc(toScreenX(climber.x), toScreenY(climber.y), REACH * S, 0, Math.PI * 2);
+    ctx.arc(sx(hm.x), sy(hm.y), REACH * S, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
   }
 
-  function drawHUD() {
-    const top = safeTop + 14;
-    ctx.textBaseline = 'top';
-    ctx.fillStyle = 'rgba(20,24,28,0.55)';
-    roundRect(12, top - 6, 150, 74, 12);
-    ctx.fill();
-    ctx.fillStyle = C.climber;
-    ctx.textAlign = 'left';
-    ctx.font = `800 44px ${FONT}`;
-    ctx.fillText(`${height} m`, 24, top);
-    ctx.font = `600 18px ${FONT}`;
-    ctx.globalAlpha = 0.75;
-    ctx.fillText(`BEST ${best} m`, 24, top + 44);
-    ctx.globalAlpha = 1;
+  // =====================================================================
+  // 10. DRAW: CLIMBER (seen from behind, facing the wall)
+  // =====================================================================
+  function limb(a, b, w, color) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = w * S;
+    ctx.beginPath();
+    ctx.moveTo(sx(a.x), sy(a.y));
+    ctx.lineTo(sx(b.x), sy(b.y));
+    ctx.stroke();
   }
 
+  function drawClimber(c) {
+    const j = c.j;
+    if (!j) return;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // Legs
+    for (let i = 0; i < 2; i++) {
+      limb(j.hp[i], j.knees[i], 0.155, i ? COL.pants : COL.pantsShade);
+      limb(j.knees[i], j.feet[i], 0.125, i ? COL.pants : COL.pantsShade);
+      // Shoe: points along the shin, toe into the wall
+      const kx = j.feet[i].x - j.knees[i].x, ky = j.feet[i].y - j.knees[i].y;
+      const kl = Math.hypot(kx, ky) || 1;
+      const toe = { x: j.feet[i].x + (kx / kl) * 0.08 + (i ? 0.03 : -0.03), y: j.feet[i].y + (ky / kl) * 0.08 };
+      limb(j.feet[i], toe, 0.12, COL.shoe);
+      limb({ x: toe.x, y: toe.y - 0.02 }, { x: toe.x, y: toe.y - 0.03 }, 0.07, COL.sole);
+    }
+
+    // Torso (a tapered shirt)
+    ctx.fillStyle = COL.shirt;
+    ctx.strokeStyle = COL.shirt;
+    ctx.lineWidth = 0.1 * S;
+    ctx.beginPath();
+    ctx.moveTo(sx(j.sh[0].x), sy(j.sh[0].y));
+    ctx.lineTo(sx(j.sh[1].x), sy(j.sh[1].y));
+    ctx.lineTo(sx(j.hp[1].x + j.right.x * 0.03), sy(j.hp[1].y + j.right.y * 0.03));
+    ctx.lineTo(sx(j.hp[0].x - j.right.x * 0.03), sy(j.hp[0].y - j.right.y * 0.03));
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    // spine shadow
+    limb(
+      { x: j.chest.x - j.dir.x * 0.05, y: j.chest.y - j.dir.y * 0.05 },
+      { x: j.hip.x + j.dir.x * 0.1, y: j.hip.y + j.dir.y * 0.1 },
+      0.035, COL.shirtShade,
+    );
+
+    // Harness belt and chalk bag on the back of the waist
+    const belt = (p, s) => ({ x: p.x + j.right.x * s * 0.05 + j.dir.x * 0.03, y: p.y + j.right.y * s * 0.05 + j.dir.y * 0.03 });
+    limb(belt(j.hp[0], -1), belt(j.hp[1], 1), 0.06, COL.harness);
+    drawChalkBag(j);
+
+    // Arms
+    for (let i = 0; i < 2; i++) {
+      const elbow = j.elbows[i];
+      const sleeve = { x: lerp(j.sh[i].x, elbow.x, 0.45), y: lerp(j.sh[i].y, elbow.y, 0.45) };
+      limb(j.sh[i], elbow, 0.105, COL.skin);
+      limb(j.sh[i], sleeve, 0.125, COL.shirt);
+      limb(elbow, j.hands[i], 0.095, i ? COL.skin : COL.skinShade);
+      // chalky hand
+      ctx.fillStyle = COL.skin;
+      ctx.beginPath(); ctx.arc(sx(j.hands[i].x), sy(j.hands[i].y), 0.065 * S, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.beginPath(); ctx.arc(sx(j.hands[i].x), sy(j.hands[i].y) - 0.01 * S, 0.045 * S, 0, Math.PI * 2); ctx.fill();
+    }
+
+    drawHead(j);
+    ctx.restore();
+  }
+
+  function drawChalkBag(j) {
+    const p = { x: j.hip.x - j.dir.x * 0.08, y: j.hip.y - j.dir.y * 0.08 };
+    const ang = Math.atan2(-j.dir.y, j.dir.x) + Math.PI / 2;  // screen rotation of torso
+    ctx.save();
+    ctx.translate(sx(p.x), sy(p.y));
+    ctx.rotate(ang);
+    const w = 0.15 * S, h = 0.17 * S;
+    ctx.fillStyle = COL.bag;
+    ctx.beginPath();
+    ctx.moveTo(-w / 2, -h * 0.35);
+    ctx.lineTo(w / 2, -h * 0.35);
+    ctx.quadraticCurveTo(w * 0.62, h * 0.55, 0, h * 0.62);
+    ctx.quadraticCurveTo(-w * 0.62, h * 0.55, -w / 2, -h * 0.35);
+    ctx.fill();
+    ctx.fillStyle = COL.bagRim;
+    ctx.fillRect(-w / 2 - 1, -h * 0.45, w + 2, h * 0.16);
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.beginPath(); ctx.arc(-w * 0.15, -h * 0.5, w * 0.14, 0, Math.PI * 2); ctx.arc(w * 0.12, -h * 0.52, w * 0.1, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawHead(j) {
+    const ang = Math.atan2(-j.dir.y, j.dir.x) + Math.PI / 2;
+    const r = BODY.head * S;
+    ctx.save();
+    ctx.translate(sx(j.head.x), sy(j.head.y));
+    ctx.rotate(ang);
+    // neck
+    ctx.fillStyle = COL.skinShade;
+    ctx.fillRect(-r * 0.35, r * 0.4, r * 0.7, r * 0.8);
+    // head (back of the head: ears + nape)
+    ctx.fillStyle = COL.skin;
+    ctx.beginPath(); ctx.arc(0, 0, r * 0.95, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = COL.skinShade;
+    ctx.beginPath(); ctx.ellipse(-r * 0.95, r * 0.05, r * 0.16, r * 0.24, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(r * 0.95, r * 0.05, r * 0.16, r * 0.24, 0, 0, Math.PI * 2); ctx.fill();
+    // helmet shell
+    ctx.fillStyle = COL.helmet;
+    ctx.beginPath();
+    ctx.ellipse(0, -r * 0.12, r * 1.08, r * 1.0, 0, Math.PI * 1.02, Math.PI * 1.98 + 0.4);
+    ctx.lineTo(r * 1.0, r * 0.3);
+    ctx.quadraticCurveTo(0, r * 0.52, -r * 1.0, r * 0.3);
+    ctx.closePath();
+    ctx.fill();
+    // rim and vents
+    ctx.strokeStyle = COL.helmetShade;
+    ctx.lineWidth = Math.max(1.5, r * 0.18);
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-r * 0.98, r * 0.28); ctx.quadraticCurveTo(0, r * 0.5, r * 0.98, r * 0.28); ctx.stroke();
+    ctx.lineWidth = Math.max(1, r * 0.12);
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.35, -r * 0.7); ctx.lineTo(-r * 0.35, -r * 0.25);
+    ctx.moveTo(r * 0.35, -r * 0.7); ctx.lineTo(r * 0.35, -r * 0.25);
+    ctx.stroke();
+    // highlight
+    ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+    ctx.lineWidth = Math.max(1, r * 0.14);
+    ctx.beginPath(); ctx.arc(0, -r * 0.12, r * 0.78, Math.PI * 1.15, Math.PI * 1.45); ctx.stroke();
+    ctx.restore();
+  }
+
+  // =====================================================================
+  // 11. DRAW: FRAME
+  // =====================================================================
   function drawDead() {
     ctx.fillStyle = 'rgba(15,18,22,0.72)';
     ctx.fillRect(0, 0, W, H);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = C.danger;
-    ctx.font = `800 56px ${FONT}`;
+    ctx.fillStyle = COL.danger;
+    ctx.font = '800 56px "Barlow Condensed", system-ui, sans-serif';
     ctx.fillText('YOU FELL', W / 2, H * 0.4);
-    ctx.fillStyle = C.climber;
-    ctx.font = `600 28px ${FONT}`;
-    ctx.fillText(`${height} m  ·  best ${best} m`, W / 2, H * 0.4 + 52);
-    ctx.globalAlpha = 0.7;
-    ctx.font = `600 22px ${FONT}`;
-    ctx.fillText('Tap anywhere to climb again', W / 2, H * 0.4 + 100);
-    ctx.globalAlpha = 1;
-  }
-
-  function roundRect(x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r);
-    ctx.closePath();
+    ctx.fillStyle = '#fbf7ef';
+    ctx.font = '600 22px "Barlow Condensed", system-ui, sans-serif';
+    ctx.fillText('Tap anywhere to climb again', W / 2, H * 0.4 + 50);
   }
 
   function draw() {
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    drawSky();
     drawWall();
     drawReach();
-    const canReach = state === 'climbing' && !climber.moving;
-    for (const h of holds) {
-      const reachable = canReach && h !== climber.hold &&
-        dist(h.x, h.y, climber.x, climber.y) <= REACH;
-      drawHold(h, reachable);
-    }
+    const idle = state === 'play' && !climber.move;
+    for (const h of holds) drawHold(h, idle && h !== climber.hold && canReach(h));
     if (missFx) {
-      ctx.strokeStyle = C.danger;
+      ctx.strokeStyle = COL.danger;
       ctx.globalAlpha = 1 - missFx.t / 0.35;
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.arc(toScreenX(missFx.x), toScreenY(missFx.y), 10 + missFx.t * 60, 0, Math.PI * 2);
+      ctx.arc(sx(missFx.x), sy(missFx.y), 10 + missFx.t * 60, 0, Math.PI * 2);
       ctx.stroke();
       ctx.globalAlpha = 1;
     }
-    drawClimber();
-    drawHUD();
+    drawClimber(climber);
     if (state === 'dead') drawDead();
   }
 
-  // ---------- Loop ----------
+  // =====================================================================
+  // 12. HUD
+  // =====================================================================
+  const hudHeight = document.getElementById('hudHeight');
+  const hudBest = document.getElementById('hudBest');
+  function updateHud(silent) {
+    hudHeight.innerHTML = `${height}<small>m</small>`;
+    if (height > save.data.best) { save.data.best = height; save.write(); }
+    hudBest.textContent = `BEST ${save.data.best} m`;
+    if (!silent) {
+      hudHeight.classList.remove('pop');
+      void hudHeight.offsetWidth;
+      hudHeight.classList.add('pop');
+    }
+  }
+
+  // =====================================================================
+  // 13. MAIN LOOP
+  // =====================================================================
   let last = performance.now();
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
@@ -461,6 +884,11 @@
     update(dt);
     draw();
     requestAnimationFrame(frame);
+  }
+
+  // Test hook (only with #debug in the URL)
+  if (location.hash === '#debug') {
+    window.__crux = { get climber() { return climber; }, get holds() { return holds; }, get state() { return state; }, sx, sy, canReach };
   }
 
   resize();
