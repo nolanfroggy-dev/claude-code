@@ -34,6 +34,7 @@
     -webkit-touch-callout: none;
     -webkit-tap-highlight-color: transparent;
   }
+  [hidden] { display: none !important; }
   canvas {
     position: fixed;
     inset: 0;
@@ -237,6 +238,175 @@
   }
   .chalk-btn.empty .face { opacity: 0.45; }
   .chalk-btn.empty .count { background: var(--danger); color: var(--ink); }
+  .chalk-btn.pulse { animation: glow 1s ease-in-out infinite alternate; }
+  @keyframes glow { to { box-shadow: 0 0 0 8px rgba(255, 178, 56, 0.35), 0 6px 18px rgba(0, 0, 0, 0.35); } }
+
+  /* ================= Screens ================= */
+  body[data-screen="menu"] #pauseBtn { display: none; }
+  body[data-screen="menu"] .score,
+  body[data-screen="menu"] .meters,
+  body[data-screen="menu"] .chalk-btn,
+  body[data-screen="over"] #pauseBtn,
+  body[data-screen="over"] .chalk-btn,
+  body[data-screen="paused"] .chalk-btn { visibility: hidden; }
+
+  .screen {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: calc(env(safe-area-inset-top, 0px) + 24px) 16px calc(env(safe-area-inset-bottom, 0px) + 28px);
+    text-align: center;
+    box-sizing: border-box;
+  }
+  .screen.dim { background: rgba(8, 12, 18, 0.62); }
+  #startScreen {
+    justify-content: space-between;
+    background: linear-gradient(to bottom, rgba(8, 12, 18, 0.6), rgba(8, 12, 18, 0) 38%, rgba(8, 12, 18, 0) 58%, rgba(8, 12, 18, 0.8));
+    padding-top: calc(env(safe-area-inset-top, 0px) + 72px);
+  }
+  .title {
+    margin: 0;
+    font-style: italic;
+    font-weight: 800;
+    font-size: clamp(68px, 24vw, 128px);
+    line-height: 0.8;
+    letter-spacing: -0.01em;
+    text-shadow: 0 6px 0 rgba(0, 0, 0, 0.3);
+    animation: drop 0.7s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+  }
+  .title span { display: block; color: var(--accent); }
+  @keyframes drop { from { transform: translateY(-30px) rotate(-3deg); opacity: 0; } }
+  .tagline {
+    margin: 12px 0 0;
+    font-weight: 700;
+    font-size: 16px;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+  }
+  .start-bottom { display: grid; gap: 16px; justify-items: center; width: 100%; }
+  .record {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    width: min(100%, 340px);
+  }
+  .record div {
+    flex: 1;
+    background: var(--panel);
+    border-radius: 14px;
+    padding: 8px 6px;
+  }
+  .record b { display: block; font-size: 28px; font-weight: 800; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .record span { font-size: 12px; font-weight: 700; letter-spacing: 0.14em; color: var(--muted); }
+
+  .btn {
+    font-family: var(--font);
+    font-weight: 800;
+    font-size: 30px;
+    letter-spacing: 0.08em;
+    border: 0;
+    border-radius: 18px;
+    min-height: 68px;
+    width: min(100%, 340px);
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: transform 0.08s, box-shadow 0.08s;
+  }
+  .btn:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+  .btn-primary {
+    background: var(--accent);
+    color: var(--accent-ink);
+    box-shadow: 0 6px 0 #b8741a, 0 14px 28px rgba(0, 0, 0, 0.35);
+  }
+  .btn-primary:active { transform: translateY(5px); box-shadow: 0 1px 0 #b8741a, 0 6px 12px rgba(0, 0, 0, 0.3); }
+  .btn-secondary {
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--ink);
+    font-size: 22px;
+    min-height: 56px;
+    letter-spacing: 0.06em;
+  }
+  .btn-secondary:active { transform: scale(0.97); }
+  .btn-go { background: var(--good); color: #0c2a18; box-shadow: 0 5px 0 #3c9a62; font-size: 22px; min-height: 60px; }
+  .btn-go:active { transform: translateY(4px); box-shadow: 0 1px 0 #3c9a62; }
+  #playBtn { animation: breathe 1.6s ease-in-out infinite; }
+  @keyframes breathe { 50% { transform: scale(1.04); } }
+
+  .card {
+    background: rgba(14, 20, 28, 0.94);
+    border-radius: 24px;
+    padding: 22px 18px 20px;
+    width: min(100%, 360px);
+    box-sizing: border-box;
+    display: grid;
+    gap: 14px;
+    justify-items: center;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+    animation: rise 0.35s cubic-bezier(0.2, 1.3, 0.4, 1) both;
+  }
+  @keyframes rise { from { transform: translateY(40px) scale(0.95); opacity: 0; } }
+  .card h2 {
+    margin: 0;
+    font-style: italic;
+    font-weight: 800;
+    font-size: 40px;
+    line-height: 1;
+    letter-spacing: 0.02em;
+  }
+  .reason { color: var(--danger); }
+  .big-height { font-weight: 800; font-size: 84px; line-height: 0.9; font-variant-numeric: tabular-nums; }
+  .big-height small { font-size: 36px; margin-left: 4px; }
+  .badge {
+    background: var(--good);
+    color: #0c2a18;
+    font-weight: 800;
+    font-size: 16px;
+    letter-spacing: 0.14em;
+    border-radius: 999px;
+    padding: 4px 12px;
+    animation: badge 0.6s ease-in-out infinite alternate;
+  }
+  @keyframes badge { to { transform: scale(1.08); } }
+  .stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+  }
+  .stat {
+    background: rgba(255, 255, 255, 0.07);
+    border-radius: 14px;
+    padding: 8px 12px;
+    text-align: left;
+  }
+  .stat b { display: block; font-weight: 800; font-size: 30px; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .stat span { font-weight: 700; font-size: 12px; letter-spacing: 0.14em; color: var(--muted); }
+  .card .btns { display: grid; gap: 10px; width: 100%; justify-items: center; }
+
+  /* ================= Tutorial tip ================= */
+  .tip {
+    position: fixed;
+    left: 16px;
+    right: 112px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 22px);
+    background: rgba(251, 247, 239, 0.96);
+    color: #1d2733;
+    border-radius: 16px;
+    padding: 10px 14px 12px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+    max-width: 420px;
+  }
+  .tip.in { animation: rise 0.35s cubic-bezier(0.2, 1.3, 0.4, 1) both; }
+  .tip-step { font-weight: 800; font-size: 13px; letter-spacing: 0.16em; color: #b8741a; }
+  .tip-text { font-weight: 600; font-size: 19px; line-height: 1.2; margin-top: 2px; }
+  .tip-hint { font-weight: 600; font-size: 13px; color: #6b7280; margin-top: 6px; }
+  @media (prefers-reduced-motion: reduce) {
+    .title, .card, .tip.in, #playBtn, .badge, .chalk-btn.pulse { animation: none; }
+  }
   .pop { animation: pop 0.28s ease-out; }
   @keyframes pop {
     0% { transform: scale(1); }
@@ -248,7 +418,7 @@
   }
 </style>
 </head>
-<body>
+<body data-screen="menu">
 <canvas id="game"></canvas>
 
 <div class="hud" id="hud">
@@ -263,6 +433,9 @@
     <div class="pumpbar" id="pumpBar"><div id="pumpFill"></div></div>
   </div>
   <div class="hud-buttons">
+    <button class="icon-btn" id="pauseBtn" aria-label="Pause">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.2" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1.2" fill="currentColor"/></svg>
+    </button>
     <button class="icon-btn" id="muteBtn" aria-label="Mute sound" aria-pressed="false">
       <svg class="on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8.5 8.5 0 0 1 0 12"/>
@@ -273,6 +446,57 @@
     </button>
   </div>
 </div>
+
+<div class="tip" id="tip" hidden role="status">
+  <div class="tip-step" id="tipStep">TIP 1 OF 3</div>
+  <div class="tip-text" id="tipText"></div>
+  <div class="tip-hint">Tap this card to skip</div>
+</div>
+
+<section class="screen" id="startScreen" aria-label="Start">
+  <div>
+    <h1 class="title">CRUX<span>CLIMB</span></h1>
+    <p class="tagline">REACH · DYNO · DON'T LET GO</p>
+  </div>
+  <div class="start-bottom">
+    <div class="record">
+      <div><b id="startBest">—</b><span>BEST</span></div>
+      <div><b id="startGrade">—</b><span>TOP GRADE</span></div>
+      <div><b id="startRuns">0</b><span>CLIMBS</span></div>
+    </div>
+    <button class="btn btn-primary" id="playBtn">CLIMB</button>
+  </div>
+</section>
+
+<section class="screen dim" id="pauseScreen" aria-label="Paused" hidden>
+  <div class="card">
+    <h2>PAUSED</h2>
+    <div class="btns">
+      <button class="btn btn-primary" id="resumeBtn">RESUME</button>
+      <button class="btn btn-secondary" id="restartBtn">Restart climb</button>
+      <button class="btn btn-secondary" id="pauseMenuBtn">Main menu</button>
+    </div>
+  </div>
+</section>
+
+<section class="screen dim" id="overScreen" aria-label="Game over" hidden>
+  <div class="card">
+    <h2 class="reason" id="overReason">YOU FELL</h2>
+    <div class="big-height"><span id="overHeight">0</span><small>m</small></div>
+    <div class="badge" id="overNewBest" hidden>NEW BEST!</div>
+    <div class="stats">
+      <div class="stat"><b id="overGrade">V0</b><span>GRADE REACHED</span></div>
+      <div class="stat"><b id="overHolds">0</b><span>HOLDS GRABBED</span></div>
+      <div class="stat"><b id="overDynos">0</b><span>DYNOS LANDED</span></div>
+      <div class="stat"><b id="overBest">0 m</b><span>BEST HEIGHT</span></div>
+    </div>
+    <div class="btns">
+      <button class="btn btn-go" id="continueBtn" hidden>Continue from ledge</button>
+      <button class="btn btn-primary" id="retryBtn">TRY AGAIN</button>
+      <button class="btn btn-secondary" id="overMenuBtn">Main menu</button>
+    </div>
+  </div>
+</section>
 
 <div class="toast" id="toast"><div class="big" id="toastBig"></div><div class="sub" id="toastSub"></div></div>
 
@@ -372,7 +596,7 @@
   // =====================================================================
   const STORE_KEY = 'crux.v2';
   const save = (() => {
-    const defaults = { best: 0, muted: false };
+    const defaults = { best: 0, bestGrade: 0, runs: 0, holds: 0, dynos: 0, tutorialDone: false, muted: false };
     let data = { ...defaults };
     try {
       const raw = localStorage.getItem(STORE_KEY);
@@ -996,7 +1220,7 @@
       g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     }
     function tone({ f = 440, f2 = 0, type = 'sine', dur = 0.2, vol = 0.3, delay = 0, attack = 0.005 }) {
-      if (!ac || muted) return;
+      if (!ac || muted || state === 'menu') return;
       const t0 = ac.currentTime + delay;
       const o = ac.createOscillator(), g = ac.createGain();
       o.type = type;
@@ -1007,7 +1231,7 @@
       o.start(t0); o.stop(t0 + dur + 0.05);
     }
     function noise({ dur = 0.2, vol = 0.3, type = 'bandpass', f = 1000, f2 = 0, q = 1, delay = 0, attack = 0.005 }) {
-      if (!ac || muted) return;
+      if (!ac || muted || state === 'menu') return;
       const t0 = ac.currentTime + delay;
       const src = ac.createBufferSource();
       src.buffer = noiseBuf;
@@ -1067,6 +1291,7 @@
 
   // ---------- Haptics ----------
   function buzz(pattern) {
+    if (state === 'menu') return;
     try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) { /* not allowed here */ }
   }
 
@@ -1177,8 +1402,9 @@
   // =====================================================================
   // 7. GAME STATE & INPUT
   // =====================================================================
-  let state = 'play';           // play | falling | dead
-  let height = 0, time = 0, deadAt = 0;
+  let state = 'menu';           // menu | play | falling | over
+  let paused = false;
+  let height = 0, time = 0;
   let missFx = null;
   let fallReason = '';
   const stats = { holds: 0, dynos: 0, grade: 0 };
@@ -1198,7 +1424,6 @@
     cam.y = START_Y - (H * 0.4) / S;
     height = 0;
     chalk.uses = CHALK.max; chalk.t = 0;
-    state = 'play';
     missFx = null;
     floats = [];
     stats.holds = 0; stats.dynos = 0; stats.grade = 0;
@@ -1213,7 +1438,7 @@
 
   function onGrab(h, fromDyno) {
     h.grip = 0;              // slopers restart their slip timer each grab
-    stats.holds++;
+    if (state === 'play') stats.holds++;
     const gp = holdPoint(h, handsMid());
     chalkPuff(gp.x, gp.y + 0.05, false);
     if (!fromDyno) { Sound.grab(h.type); buzz(10); }
@@ -1326,9 +1551,9 @@
     return dist(q.x, q.y, p.x, p.y) < DYNO.catchR + h.r * 0.6;
   }
 
-  function launchDyno() {
+  function launchDyno() { launchDynoWith(dynoVelocity()); tut.dynoTried = true; }
+  function launchDynoWith(v) {
     const c = climber;
-    const v = dynoVelocity();
     c.dyno = { phase: 'load', t: 0, v, from: c.hold, p: handsMid(), launchY: handsMid().y, buffer: 0 };
     c.pump = Math.min(100, c.pump + DYNO.pump);
     c.shake = null;
@@ -1384,6 +1609,7 @@
     ];
 
     const h = catchableHold();
+    if (d.autoCatch && catchRange(d.autoCatch, d.p)) { catchHold(d.autoCatch); return; }
     if (d.buffer > 0) {
       if (h) { catchHold(h); return; }
       d.buffer -= dt;
@@ -1404,7 +1630,7 @@
     c.restT = 0;
     placeFeet(c, false, c.hipT);
     h.chalk = Math.min(1, h.chalk + 0.6);
-    stats.dynos++;
+    if (state === 'play') stats.dynos++;
     onGrab(h, true);
     Sound.catch();
     buzz(25);
@@ -1468,6 +1694,7 @@
     if (c.hold.type === 'sloper') c.hold.grip = 0;   // fresh chalk resets a sloper
     c.dip = { hand: c.nextShakeHand, t: 0, dur: 0.55 };
     c.shake = null;
+    tut.chalked = true;
     onChalk();
     return true;
   }
@@ -1483,6 +1710,7 @@
   // A short slow-motion beat, then the climber tumbles off the bottom.
   let fallT = 0;
   function startFall(reason) {
+    if (state === 'menu') { reset(); return; }
     fallReason = reason || '';
     state = 'falling';
     fallT = 0;
@@ -1519,11 +1747,7 @@
   // ---------- Pointer input ----------
   canvas.addEventListener('pointerdown', e => {
     e.preventDefault();
-    if (state === 'dead') {
-      if (performance.now() - deadAt > 600) reset();
-      return;
-    }
-    if (state !== 'play') return;
+    if (state !== 'play' || paused) return;
     if (climber.dyno) { dynoTap(); return; }
     if (press.active) return;
     Object.assign(press, {
@@ -1592,7 +1816,9 @@
     updateConfetti(realDt);
     updateParticles(dt);
     updateChalk(dt);
-    if (state === 'play') { updateHoldTimers(dt); updatePump(dt); updateDyno(dt); }
+    if (state === 'play') { updateHoldTimers(dt); updatePump(dt); updateTutorial(realDt); }
+    if (state === 'menu') updateAttract(dt);
+    if (state === 'play' || state === 'menu') updateDyno(dt);
     climber.coil = press.charging && !!climber.hold;
     if (climber.coil) {
       // crouch and coil opposite the aim while charging
@@ -1602,8 +1828,8 @@
     }
     updateClimber(climber, dt, time);
 
-    if (state === 'play') {
-      if (climber.hold) {
+    if (state === 'play' || state === 'menu') {
+      if (climber.hold && state === 'play') {
         const h = Math.max(height, Math.floor(climber.hold.y - START_Y));
         if (h > height) {
           height = h;
@@ -1619,24 +1845,168 @@
           }
         }
       }
-      const target = Math.max(climber.hip.y, climber.dyno ? climber.dyno.p.y - 1.4 : -Infinity) - (H * 0.36) / S;
+      const lift = state === 'menu' ? 0.46 : 0.36;
+      const target = Math.max(climber.hip.y, climber.dyno ? climber.dyno.p.y - 1.4 : -Infinity) - (H * lift) / S;
       cam.y += (target - cam.y) * Math.min(1, dt * 4);
       generate(cam.y + H / S + 10);
-      holds = holds.filter(h => (h.y > cam.y - 4 && !(h.broken && h !== climber.hold)) || h === climber.hold);
+      // drop holds far below, but keep everything above an unused checkpoint
+      const keepFrom = checkpoint && !checkpointUsed ? checkpoint.y - 0.1 : Infinity;
+      holds = holds.filter(h => h === climber.hold || (!h.broken && (h.y > cam.y - 4 || h.y >= keepFrom)));
     } else if (state === 'falling') {
       fallT += realDt;
       if (fallT < 0.9) {
         const target = climber.hip.y - (H * 0.45) / S;
         cam.y += (target - cam.y) * Math.min(1, dt * 3);
       }
-      if (fallT > 2.4 || (fallT > 1 && sy(climber.hip.y + 2) > H + 40)) {
-        state = 'dead';
-        deadAt = performance.now();
-        onGameOver();
-      }
+      if (fallT > 2.4 || (fallT > 1 && sy(climber.hip.y + 2) > H + 40)) onGameOver();
     }
   }
-  function onGameOver() { /* screens hook */ }
+
+  // ---------- Attract mode: the start screen climber climbs on its own ----------
+  const attract = { t: 1 };
+  function updateAttract(dt) {
+    const c = climber;
+    if (c.move || c.dyno || c.pose !== 'hang' || !c.hold) return;
+    attract.t -= dt;
+    if (attract.t > 0) return;
+    attract.t = rand(0.8, 1.4);
+    const hm = handsMid();
+    const next = holds.filter(h => h.route && h !== c.hold && h.y > hm.y + 0.3).sort((a, b) => a.y - b.y)[0];
+    if (!next) return;
+    if (next.type === 'ledge') next.grabX = clamp(hm.x, X_MIN, X_MAX);
+    if (canReach(next)) { startReach(c, next); return; }
+    // aim a dyno so the hands pass the hold on the way up
+    const q = holdPoint(next, hm), dx = q.x - hm.x, dy = q.y - hm.y;
+    const vy = Math.sqrt(2 * GRAVITY * (dy + 0.35));
+    const t = (vy - Math.sqrt(Math.max(0, vy * vy - 2 * GRAVITY * dy))) / GRAVITY;
+    launchDynoWith({ x: dx / Math.max(t, 0.05), y: vy });
+    c.dyno.autoCatch = next;
+  }
+
+  // =====================================================================
+  // 8b. SCREENS & FLOW
+  // =====================================================================
+  const $ = id => document.getElementById(id);
+  function setScreen(name) {
+    document.body.dataset.screen = name;
+    $('startScreen').hidden = name !== 'menu';
+    $('pauseScreen').hidden = name !== 'paused';
+    $('overScreen').hidden = name !== 'over';
+  }
+
+  function toMenu() {
+    paused = false;
+    reset();
+    state = 'menu';
+    attract.t = 1.2;
+    const d = save.data;
+    $('startBest').textContent = d.best > 0 ? `${d.best} m` : '—';
+    $('startGrade').textContent = d.runs > 0 ? `V${d.bestGrade}` : '—';
+    $('startRuns').textContent = d.runs;
+    setScreen('menu');
+  }
+
+  function startRun() {
+    paused = false;
+    reset();
+    state = 'play';
+    setScreen('play');
+    startTutorial();
+  }
+
+  function onGameOver() {
+    state = 'over';
+    const d = save.data;
+    const isBest = height > prevBest;
+    d.runs++;
+    d.holds += stats.holds;
+    d.dynos += stats.dynos;
+    d.bestGrade = Math.max(d.bestGrade, stats.grade);
+    save.write();
+    endTutorial(false);
+
+    $('overReason').textContent = fallReason || 'YOU FELL';
+    $('overHeight').textContent = height;
+    $('overGrade').textContent = `V${stats.grade}`;
+    $('overHolds').textContent = stats.holds;
+    $('overDynos').textContent = stats.dynos;
+    $('overBest').textContent = `${d.best} m`;
+    $('overNewBest').hidden = !(isBest && height > 0);
+    const cont = $('continueBtn');
+    cont.hidden = !(checkpoint && !checkpointUsed);
+    if (!cont.hidden) cont.textContent = `Continue from ${Math.round(checkpoint.y - START_Y)} m ledge`;
+    setScreen('over');
+    if (isBest && prevBest > 0 && !celebrated) { launchConfetti(); Sound.best(); }
+  }
+
+  // Once per run: respawn on the last rest ledge you reached.
+  function continueRun() {
+    const l = checkpoint;
+    if (!l || checkpointUsed) return;
+    checkpointUsed = true;
+    checkpoint = null;
+    if (!holds.includes(l)) holds.push(l);
+    l.grabX = clamp(l.grabX != null ? l.grabX : WALL_W / 2, X_MIN, X_MAX);
+    climber = makeClimber(l);
+    cam.y = l.y - HANG - (H * 0.36) / S;
+    chalk.uses = CHALK.max;
+    timeScale = 1; slowmo = 0;
+    floats = [];
+    press.active = false; press.charging = false;
+    state = 'play';
+    setScreen('play');
+    floatText('BACK ON THE LEDGE', l.grabX, l.y + 0.8, '#5fd08a', 24);
+  }
+
+  function pauseGame() {
+    if (state !== 'play' || paused) return;
+    paused = true;
+    press.active = false; press.charging = false;
+    setScreen('paused');
+  }
+  function resumeGame() {
+    if (!paused) return;
+    paused = false;
+    setScreen('play');
+  }
+
+  // ---------- First-play tutorial: three short tips ----------
+  const TIPS = [
+    'Tap a glowing hold to reach for it.',
+    'Out of reach? Press and hold to charge a dyno, aim with your finger, and let go. Tap again as your hands pass a hold to catch it.',
+    'Watch your pump. Rest on orange jugs to recover, and tap chalk when your arms burn.',
+  ];
+  const tut = { active: false, step: 0, t: 0, moves: 0, dynoTried: false, chalked: false };
+  function startTutorial() {
+    if (save.data.tutorialDone) return;
+    Object.assign(tut, { active: true, dynoTried: false, chalked: false });
+    setTip(1);
+  }
+  function setTip(n) {
+    tut.step = n; tut.t = 0; tut.moves = stats.holds;
+    $('tipStep').textContent = `TIP ${n} OF ${TIPS.length}`;
+    $('tipText').textContent = TIPS[n - 1];
+    $('tip').hidden = false;
+    $('tip').classList.remove('in'); void $('tip').offsetWidth; $('tip').classList.add('in');
+    chalkBtn.classList.toggle('pulse', n === 3);
+  }
+  function endTutorial(done = true) {
+    if (!tut.active) return;
+    tut.active = false;
+    $('tip').hidden = true;
+    chalkBtn.classList.remove('pulse');
+    if (done) { save.data.tutorialDone = true; save.write(); }
+  }
+  function advanceTip() {
+    if (tut.step < TIPS.length) setTip(tut.step + 1); else endTutorial();
+  }
+  function updateTutorial(dt) {
+    if (!tut.active) return;
+    tut.t += dt;
+    if (tut.step === 1 && stats.holds >= 2) advanceTip();
+    else if (tut.step === 2 && (tut.dynoTried || stats.holds - tut.moves >= 6)) advanceTip();
+    else if (tut.step === 3 && (tut.chalked || tut.t > 8)) endTutorial();
+  }
 
   function onGradeUp(g) {
     showToast(`V${g} UNLOCKED`, ZONES[zoneOf(g)].name, ZONES[zoneOf(g)].accent);
@@ -2134,14 +2504,20 @@
   function drawReach() {
     if (state !== 'play' || climber.move || climber.dyno || press.charging) return;
     const hm = handsMid();
+    const x = sx(hm.x), y = sy(hm.y), r = REACH * S;
+    const breathe = 1 + Math.sin(time * 2.4) * 0.006;
     ctx.save();
-    ctx.strokeStyle = COL.reach;
-    ctx.globalAlpha = 0.35;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([2, 9]);
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.arc(sx(hm.x), sy(hm.y), REACH * S, 0, Math.PI * 2);
+    // soft disc + crisp ring with a dark under-stroke, readable on any wall
+    const g = ctx.createRadialGradient(x, y, r * 0.2, x, y, r);
+    g.addColorStop(0, 'rgba(127,224,212,0)');
+    g.addColorStop(1, 'rgba(127,224,212,0.12)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, r * breathe, 0, Math.PI * 2); ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(10,20,30,0.25)';
+    ctx.stroke();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(127,224,212,0.75)';
     ctx.stroke();
     ctx.restore();
   }
@@ -2284,18 +2660,7 @@
   // =====================================================================
   // 11. DRAW: FRAME
   // =====================================================================
-  function drawDead() {
-    ctx.fillStyle = 'rgba(15,18,22,0.72)';
-    ctx.fillRect(0, 0, W, H);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = COL.danger;
-    ctx.font = '800 56px "Barlow Condensed", system-ui, sans-serif';
-    ctx.fillText(fallReason || 'YOU FELL', W / 2, H * 0.4);
-    ctx.fillStyle = '#fbf7ef';
-    ctx.font = '600 22px "Barlow Condensed", system-ui, sans-serif';
-    ctx.fillText('Tap anywhere to climb again', W / 2, H * 0.4 + 50);
-  }
+
 
   // Dotted jump arc + power ring while charging a dyno.
   function drawDynoPreview() {
@@ -2338,7 +2703,7 @@
   // Mid-air: holds in catch range pulse, telling you when to tap.
   function drawCatchCue() {
     const d = climber.dyno;
-    if (!d || d.phase !== 'fly') return;
+    if (!d || d.phase !== 'fly' || state !== 'play') return;
     const h = catchableHold();
     if (!h) return;
     const q = holdPoint(h, d.p);
@@ -2424,7 +2789,6 @@
     ctx.restore();
     drawPumpVignette();
     drawConfetti();
-    if (state === 'dead') drawDead();
   }
 
   // =====================================================================
@@ -2515,7 +2879,7 @@
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
-    update(dt);
+    if (!paused) update(dt);
     draw();
     updateMeters();
     requestAnimationFrame(frame);
@@ -2523,11 +2887,24 @@
 
   // Test hook (only with #debug in the URL)
   if (location.hash === '#debug') {
-    window.__crux = { get climber() { return climber; }, get holds() { return holds; }, get state() { return state; }, get press() { return press; }, cam, sx, sy, canReach, toWorld, catchableHold: () => climber.dyno && climber.dyno.phase === 'fly' ? catchableHold() : null };
+    window.__crux = { get climber() { return climber; }, get holds() { return holds; }, get state() { return state; }, get press() { return press; }, cam, sx, sy, canReach, toWorld, forceReach: h => startReach(climber, h), catchableHold: () => climber.dyno && climber.dyno.phase === 'fly' ? catchableHold() : null };
   }
 
+  // ---------- Buttons ----------
+  const tapBtn = (id, fn) => $(id).addEventListener('click', () => { Sound.init(); fn(); });
+  tapBtn('playBtn', () => { startRun(); Sound.click(); });
+  tapBtn('pauseBtn', () => { Sound.click(); pauseGame(); });
+  tapBtn('resumeBtn', () => { Sound.click(); resumeGame(); });
+  tapBtn('restartBtn', () => { Sound.click(); startRun(); });
+  tapBtn('pauseMenuBtn', () => { Sound.click(); toMenu(); });
+  tapBtn('retryBtn', () => { startRun(); Sound.click(); });
+  tapBtn('continueBtn', () => { continueRun(); Sound.click(); });
+  tapBtn('overMenuBtn', () => { Sound.click(); toMenu(); });
+  $('tip').addEventListener('pointerdown', e => { e.stopPropagation(); advanceTip(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
+
   resize();
-  reset();
+  toMenu();
   requestAnimationFrame(frame);
 })();
 </script>
