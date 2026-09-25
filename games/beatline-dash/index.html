@@ -346,7 +346,7 @@
   const ORB_SMALL = 520;          // pink orb
   const PAD_SMALL = 780;          // pink pad
   const DASH_T = 0.4;             // green orb: seconds of straight-line flight
-  const SHIP_ACC = 1700, SHIP_VMAX = 400, SHIP_H = 22;   // ship: hold to climb, release to sink
+  const SHIP_ACC = 950, SHIP_VMAX = 270, SHIP_H = 22;    // ship: hold to climb, release to sink (gentle, floaty)
   const BALL_D = 30;              // ball diameter
   const SHAKE_T = 0.3;            // warning shake before a block drops
   const PX = 4;                   // art-pixel size for the 8-bit zone
@@ -363,14 +363,13 @@
   // ---- Canvas & sizing ----------------------------------------------------
   const canvas = el("game");
   const ctx = canvas.getContext("2d");
-  const buf = document.createElement("canvas"), bctx = buf.getContext("2d");   // crossfade layer
   const low = document.createElement("canvas"), lctx = low.getContext("2d");   // 8-bit zone renders here
   let dpr = 1, scale = 1, viewW = 800, viewH = VIEW_H, offY = 0, playerSX = 200, camX = 0;
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
     const cw = window.innerWidth, ch = window.innerHeight;
-    canvas.width = buf.width = Math.round(cw * dpr);
-    canvas.height = buf.height = Math.round(ch * dpr);
+    canvas.width = Math.round(cw * dpr);
+    canvas.height = Math.round(ch * dpr);
     scale = Math.min(ch / VIEW_H, cw / 720);
     viewW = cw / scale;
     viewH = ch / scale;
@@ -521,6 +520,20 @@
       },
       ground(g, x0, x1, bottom) {
         g.fillStyle = C.dirt; g.fillRect(x0, GROUND, x1 - x0, bottom - GROUND);
+        // soil layers: a darker wavy band of subsoil and a clay band below it
+        for (const [y, col, amp] of [[GROUND + 74, "#b06e39", 7], [GROUND + 150, "#9a5c2c", 9]]) {
+          g.beginPath(); g.moveTo(x0, bottom);
+          for (let x = x0; x <= x1 + 12; x += 12) g.lineTo(x, y + Math.sin((x + camX) * 0.021) * amp + Math.sin((x + camX) * 0.057) * amp * 0.4);
+          g.lineTo(x1 + 12, bottom); g.closePath(); g.fillStyle = col; g.fill();
+        }
+        // buried rocks
+        const rs = 130, r0 = Math.floor((camX + x0) / rs) - 1, r1 = Math.ceil((camX + x1) / rs) + 1;
+        for (let i = r0; i < r1; i++) {
+          if (hash(i * 11) < 0.45) continue;
+          const rx = i * rs - camX + hash(i * 13) * 80, ry = GROUND + 50 + hash(i * 17) * 130, rw = 9 + hash(i * 19) * 9;
+          g.beginPath(); g.ellipse(rx, ry, rw, rw * 0.7, 0, 0, TAU); g.fillStyle = C.rock; g.fill(); out(g, 2.5);
+          g.beginPath(); g.ellipse(rx - rw * 0.3, ry - rw * 0.25, rw * 0.3, rw * 0.18, 0, 0, TAU); g.fillStyle = "#c9b79f"; g.fill();
+        }
         const seg = 38, i0 = Math.floor((camX + x0) / seg) - 1, i1 = Math.ceil((camX + x1) / seg) + 1;
         g.fillStyle = C.dirtDk;
         for (let i = i0; i < i1; i++) {
@@ -540,6 +553,28 @@
           g.moveTo(x - 4, GROUND); g.lineTo(x - 7, GROUND - 7); g.moveTo(x, GROUND); g.lineTo(x + 1, GROUND - 9); g.moveTo(x + 4, GROUND); g.lineTo(x + 7, GROUND - 6);
         }
         g.lineWidth = 2.5; g.strokeStyle = C.grassDk; g.stroke();
+        // flowers, bushes and mushrooms along the grass
+        const ds = 90, d0 = Math.floor((camX + x0) / ds) - 1, d1 = Math.ceil((camX + x1) / ds) + 1;
+        for (let i = d0; i < d1; i++) {
+          const kind = hash(i * 23);
+          if (kind < 0.4) continue;
+          const x = i * ds - camX + hash(i * 29) * 50;
+          if (x < x0 + 8 || x > x1 - 8) continue;
+          if (kind < 0.72) {                         // flower
+            const col = [C.red, "#ff6fb5", C.blue, "#ffffff"][Math.floor(hash(i * 31) * 4)];
+            g.beginPath(); g.moveTo(x, GROUND); g.lineTo(x, GROUND - 13); g.lineWidth = 2; g.strokeStyle = C.grassDk; g.stroke();
+            g.beginPath(); for (let a = 0; a < 5; a++) { const px = x + Math.cos(a * 1.257) * 4, py = GROUND - 15 + Math.sin(a * 1.257) * 4; g.moveTo(px + 3, py); g.arc(px, py, 3, 0, TAU); }
+            g.fillStyle = col; g.fill(); g.lineWidth = 1.2; g.strokeStyle = C.ink; g.stroke();
+            g.beginPath(); g.arc(x, GROUND - 15, 2.2, 0, TAU); g.fillStyle = C.sun; g.fill();
+          } else if (kind < 0.9) {                   // bush
+            g.beginPath(); g.arc(x - 8, GROUND - 5, 8, Math.PI, 0); g.arc(x + 1, GROUND - 9, 10, Math.PI, 0); g.arc(x + 11, GROUND - 5, 7, Math.PI, 0); g.closePath();
+            fillOut(g, C.tree, 2.2);
+          } else {                                   // mushroom
+            g.beginPath(); g.rect(x - 2.5, GROUND - 9, 5, 9); fillOut(g, "#f5ecd8", 1.6);
+            g.beginPath(); g.arc(x, GROUND - 9, 7, Math.PI, 0); g.closePath(); fillOut(g, C.red, 1.8);
+            g.fillStyle = "#ffffff"; g.beginPath(); g.arc(x - 3, GROUND - 12, 1.4, 0, TAU); g.arc(x + 2.5, GROUND - 13, 1.2, 0, TAU); g.fill();
+          }
+        }
       },
       side(g, x, y0, y1) { g.beginPath(); g.moveTo(x, y0); g.lineTo(x, y1); out(g, 3.5); },
       roof(g, x, w, y) {
@@ -2183,6 +2218,140 @@
       c.run(w(2));
     } },
 
+    // ---- Geometry Dash-style block structures: pillars, spike beds, floating slabs ----
+    { lvl: 0, tier: 1, name: "spike garden", build(c, k, w) {
+      // hop along crate pillars over a bed of spikes
+      const bed = w(2.2);
+      c.run(2);
+      let x = c.x;
+      c.block(x, 2, 1); x += 2;
+      c.spike(x, bed); x += bed;
+      c.block(x, 2, 2); x += 2;
+      c.spike(x, bed); x += bed;
+      c.block(x, 3, 1); x += 3;
+      c.run(x - c.x + w(4));
+      c.spike(c.x).run(w(4));
+      c.up().run(w(3.5)).down().run(w(3));
+    } },
+    { lvl: 0, tier: 1, name: "crate pyramid", build(c, k, w) {
+      const L = stepLen(k);
+      c.run(2);
+      let x = c.x;
+      for (const h of [1, 2, 3]) { c.block(x, L, h); x += L; }
+      c.block(x, w(2.5), 3); x += w(2.5);
+      for (const h of [2, 1]) { c.block(x, w(2.5), h); x += w(2.5); }
+      c.run(x - c.x + w(3.5));
+      c.gap(w(2.6)).run(w(3.5));
+    } },
+    { lvl: 0, tier: 2, name: "floating isles", build(c, k, w) {
+      // thin slabs above a spike bed: stay on the slabs
+      const pw = w(2.5), gp = w(1.8);
+      c.run(3);
+      const x0 = c.x;
+      let x = x0 + w(1.5);
+      const tops = [1.5, 2, 1.5];
+      for (const tp of tops) { c.block(x, pw, 0.5, tp - 0.5); x += pw + gp; }
+      c.spike(x0 + 1, Math.round(x - gp - x0 - 1 + 1));
+      c.run(x - c.x + w(4));
+      c.spike(c.x, 2).run(w(4));
+    } },
+    { lvl: 0, tier: 2, name: "block fortress", build(c, k, w) {
+      const L = stepLen(k);
+      c.run(2);
+      let x = c.x;
+      c.block(x, L, 1); x += L;
+      c.block(x, L, 2); x += L;
+      c.block(x, w(5), 3); c.spike(x + w(2.5), 1, 3); x += w(5);
+      const bed = w(3);
+      c.spike(x, bed); x += bed;
+      c.block(x, 3, 1); x += 3;
+      c.run(x - c.x + w(4));
+    } },
+    { lvl: 0, tier: 3, name: "rampart", build(c, k, w) {
+      // a spring over a tall crate wall, spikes along its top edge, then a spiked moat
+      c.run(2).pad(c.x);
+      let x = c.x + w(2.5);
+      c.block(x, w(6), 4); c.spike(x + w(4), 1, 4); x += w(6);
+      const bed = w(2.4);
+      c.spike(x, bed); x += bed;
+      c.block(x, 3, 1); x += 3;
+      c.run(x - c.x + w(4.5));
+      c.gap(w(2.6)).run(w(3.5));
+    } },
+    { lvl: 1, tier: 2, name: "piston pillars", build(c, k, w) {
+      const bed = w(2.2);
+      c.run(2);
+      let x = c.x;
+      c.block(x, 2, 1); x += 2;
+      c.spike(x, bed); x += bed;
+      c.block(x, 2, 2); x += 2;
+      c.spike(x, bed); x += bed;
+      c.block(x, 3, 1); x += 3;
+      c.run(x - c.x + w(4));
+      c.saw("ground", c.x).run(w(4.5));
+      c.saw("hang", c.x).run(w(3.5));
+    } },
+    { lvl: 1, tier: 3, name: "iron fortress", build(c, k, w) {
+      const L = stepLen(k);
+      c.run(2);
+      let x = c.x;
+      c.block(x, L, 1); x += L;
+      c.block(x, L, 2); x += L;
+      c.block(x, w(5.5), 3); x += w(5.5);
+      const bed = w(3);
+      c.spike(x, bed); x += bed;
+      c.block(x, 3, 1); x += 3;
+      c.run(x - c.x + w(4.5));
+      c.saw("ground", c.x).run(w(3.5));
+    } },
+    { lvl: 2, tier: 2, name: "sunken ruins", build(c, k, w) {
+      const bed = w(2.2);
+      c.run(2);
+      let x = c.x;
+      c.block(x, 2, 1); x += 2;
+      c.spike(x, bed); x += bed;
+      c.block(x, 3, 2); x += 3;
+      c.spike(x, bed); x += bed;
+      c.block(x, 2, 1); x += 2;
+      c.run(x - c.x + w(3));
+      c.fall(c.x, 2).run(2 + w(4));
+      c.spike(c.x).run(w(3.5));
+    } },
+    { lvl: 3, tier: 2, name: "log pile", build(c, k, w) {
+      const L = stepLen(k);
+      c.run(2);
+      let x = c.x;
+      c.block(x, L, 1); x += L;
+      c.block(x, w(4), 2); x += w(4);
+      c.block(x, w(3), 1); x += w(3);
+      c.run(x - c.x + w(3));
+      c.low(c.x, 3).run(3 + w(3));
+      c.spike(c.x, 2).run(w(4));
+    } },
+    { lvl: 4, tier: 2, name: "ice blocks", build(c, k, w) {
+      const pw = w(2.5), gp = w(1.8);
+      c.run(3);
+      const x0 = c.x;
+      let x = x0 + w(1.5);
+      for (const tp of [1.5, 2, 2.5, 1.5]) { c.block(x, pw, 0.5, tp - 0.5); x += pw + gp; }
+      c.spike(x0 + 1, Math.round(x - gp - x0));
+      c.run(x - c.x + w(4.5));
+      c.spike(c.x).run(w(3.5));
+    } },
+    { lvl: 5, tier: 3, name: "ink fortress", build(c, k, w) {
+      const L = stepLen(k);
+      c.run(2).up().run(L);
+      let x = c.x;
+      c.block(x, L, 1); x += L;
+      c.block(x, w(5), 2); c.spike(x + w(2.5), 1, 2); x += w(5);
+      const bed = w(3);
+      c.spike(x, bed); x += bed;
+      c.block(x, 2, 1); x += 2;
+      c.run(x - c.x + w(3));
+      c.low(c.x, 3).run(3 + w(3));
+      c.down().run(w(3));
+    } },
+
     // ---- Orbs and pads: climbs, gravity flips and dashes ----
     { lvl: 0, tier: 1, name: "orb step", build(c, k, w) {
       c.run(3);
@@ -2305,7 +2474,8 @@
   // Ship tunnel: floor, ceiling and pillar gates to weave through. Tighter in later levels.
   function buildShip(k, level) {
     const c = builder(k), w = n => Math.max(1, Math.round(n * k));
-    const T = 7, open = level >= 5 ? 2.5 : level >= 3 ? 2.9 : 3.3, secs = level >= 4 ? 11 : 9, gap = level >= 4 ? 4.8 : 5.5;
+    const T = 7, open = level >= 5 ? 2.9 : level >= 3 ? 3.3 : 3.9, secs = level >= 4 ? 11 : 9, gap = level >= 5 ? 5.5 : level >= 3 ? 6.2 : 7;
+    const swing = level >= 5 ? 1.3 : level >= 3 ? 1.1 : 0.9;   // how far the gap moves from one gate to the next
     c.run(3);
     const x0 = c.x, len = Math.round(secs * 8.25 * k), x1 = x0 + len;
     c.mode(x0, "ship", T).mode(x1, "cube", T).roofAt(x0 - 1, len + 3, T);
@@ -2313,7 +2483,7 @@
     c.run(len + w(4.5));
     let cen = T / 2, x = x0 + w(6), i = 0;
     while (x < x1 - w(4)) {
-      cen = clamp(cen + (Math.random() * 2 - 1) * 1.4, open / 2 + 0.8, T - open / 2 - 0.8);
+      cen = clamp(cen + (Math.random() * 2 - 1) * swing, open / 2 + 0.8, T - open / 2 - 0.8);
       const kind = i % 4 === 3 ? "saw" : i % 5 === 2 ? "spikes" : "gate";
       if (kind === "gate") { c.block(x, 1, cen - open / 2); c.o.push({ t: "b", x, w: 1, bot: c.f + cen + open / 2, top: c.f + T }); }
       else if (kind === "saw") c.saw("float", x, cen > T / 2 ? cen - 2.2 : cen + 2.2);
@@ -2770,7 +2940,7 @@
         else {
           S.pmode = o.mode; S.secBase = o.base; S.ceilH = o.mode === "cube" ? CEIL_H : o.ceil;
           S.flipped = false; S.dashT = 0; S.ducking = false;
-          if (o.mode === "ship") p.vy = Math.max(p.vy, 200);
+          if (o.mode === "ship") p.vy = Math.max(p.vy, 120);
           modeChanged = true;
         }
         if (!S.sim) { bigMoment(PORTAL_COL[o.icon], o.t === "mp" ? 1 : 0.6); audio.flip(true); }
@@ -2984,10 +3154,11 @@
     st.fx.draw(g, t);
     g.translate(0, cs);
     // zoom about the player horizontally and the screen centre vertically
-    const zx = playerSX + P / 2, zy = viewH / 2 - offY - cs;
-    if (zoom !== 1) { g.translate(zx, zy); g.scale(zoom, zoom); g.translate(-zx, -zy); }
-    vL = zx - zx / zoom; vR = zx + (viewW - zx) / zoom;
-    wTop = zy + (-offY - cs - 20 - zy) / zoom; wBot = zy + (viewH - offY - cs + 20 - zy) / zoom;
+    // (not in the pixel-art zone, where scaling would resample the art pixels unevenly)
+    const zx = playerSX + P / 2, zy = viewH / 2 - offY - cs, z = st.pixel ? 1 : zoom;
+    if (z !== 1) { g.translate(zx, zy); g.scale(z, z); g.translate(-zx, -zy); }
+    vL = zx - zx / z; vR = zx + (viewW - zx) / z;
+    wTop = zy + (-offY - cs - 20 - zy) / z; wBot = zy + (viewH - offY - cs + 20 - zy) / z;
     for (const o of S.objs) if (o.t === "roof") { const x = o.x - camX; if (x < vR + 20 && x + o.w > vL - 20) st.roof(g, x, o.w, GROUND - o.ceil, t, o.seed); }
     drawTerrain(g, st, t);
     // big-moment wash: over backdrop and ground only, so obstacles stay crisp
@@ -3073,7 +3244,7 @@
     if (!S.dead) {
       const p = S.player, ph = playerH();
       const pcx = p.x - camX + P / 2, pcy = GROUND - (p.h + ph / 2);
-      if (S.pmode === "ship") st.ship(g, pcx, pcy, clamp(-p.vy / 900, -0.5, 0.5));
+      if (S.pmode === "ship") st.ship(g, pcx, pcy, clamp(-p.vy / 560, -0.5, 0.5));
       else if (S.pmode === "ball") st.ball(g, pcx, pcy, p.rot);
       else st.player(g, pcx, pcy, p.rot, S.ducking, S.flipped, t);
     }
@@ -3093,20 +3264,20 @@
       drawWorld(g, st, t);
     }
   }
+  const FADE_COL = { meadow: "#c4efff", forge: "#120a08", reef: "#e6f4f2", canopy: "#dfeabd", glacier: "#eef7ff", void: "#f2eee4" };
   function render(t) {
     camX = camLeft();
     let sx = 0, sy = 0;
     if (S.shake > 0) { sx = (Math.random() - 0.5) * S.shake; sy = (Math.random() - 0.5) * S.shake; }
-    const e = ease(S.envT);
-    const base = e >= 1 || S.envFrom === S.envTo ? S.envTo : S.envFrom;
-    drawStyleTo(ctx, STYLES[base], t, sx, sy);
-    if (base !== S.envTo) {
-      bctx.setTransform(1, 0, 0, 1, 0, 0);
-      bctx.clearRect(0, 0, buf.width, buf.height);
-      drawStyleTo(bctx, STYLES[S.envTo], t, sx, sy);
+    // Zone change: a quick dip through the new zone's colour. Only one zone is
+    // drawn per frame (drawing both and blending them was far too slow).
+    const changing = S.envFrom !== S.envTo && S.envT < 1;
+    drawStyleTo(ctx, STYLES[changing && S.envT < 0.5 ? S.envFrom : S.envTo], t, sx, sy);
+    if (changing) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.globalAlpha = e;
-      ctx.drawImage(buf, 0, 0);
+      ctx.globalAlpha = 0.9 * (1 - Math.abs(S.envT * 2 - 1));
+      ctx.fillStyle = FADE_COL[STYLES[S.envTo].id] || "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.globalAlpha = 1;
     }
     if (S.flash > 0) {
@@ -3392,7 +3563,7 @@
 
   // ---- Main loop ----------------------------------------------------------
   function update(dt) {
-    S.envT = Math.min(1, S.envT + dt / 1.6);
+    S.envT = Math.min(1, S.envT + dt / 0.9);
     S.shake = Math.max(0, S.shake - dt * 40);
     S.flash = Math.max(0, S.flash - dt * 2.5);
     pop = Math.max(0, pop - dt * 2);
@@ -3498,7 +3669,7 @@
       if (!S.noSpawn) spawn();
       for (const o of S.objs) if (!seen.has(o.id)) { seen.add(o.id); spawned.push(o); }
       for (const id of starIds()) allStars.add(id);
-      if (updateDynamics(dt)) for (const st of states) { st.flip = false; st.dash = 0; st.duck = false; st.ceil = S.ceilH; st.g = false; if (S.pmode === "ship") st.vy = Math.max(st.vy, 200); }
+      if (updateDynamics(dt)) for (const st of states) { st.flip = false; st.dash = 0; st.duck = false; st.ceil = S.ceilH; st.g = false; if (S.pmode === "ship") st.vy = Math.max(st.vy, 120); }
       const usable = S.objs.filter(o => o.t === "p" || o.t === "o" || o.t === "gp" || o.t === "star");
       const next = new Map();
       let nx = null;
@@ -3588,7 +3759,7 @@
     }
     requestAnimationFrame(frame);
   }
-  window.__beatline = { S, CHUNKS, STAR_CHUNKS, buildShip, buildBall, buildStar, STYLES, solve, buildChunk, place, setEnv, startGame, spawn, speed, emit, updateCamera, updateDynamics, LEVEL_SECONDS, B, CEIL_H };
+  window.__beatline = { S, setZoom: z => { zoom = z; }, particleCount: () => particles.length, render, CHUNKS, STAR_CHUNKS, buildShip, buildBall, buildStar, STYLES, solve, buildChunk, place, setEnv, startGame, spawn, speed, emit, updateCamera, updateDynamics, LEVEL_SECONDS, B, CEIL_H };
   try { window.claude?.hot?.snapshot?.(() => ({ mode: S.mode, level: S.level, attempts: S.attempts })); } catch { /* no hot reload */ }
   const hot = window.claude?.hot;
   if (hot?.ready) hot.ready(boot); else boot(hot?.data ?? {});
