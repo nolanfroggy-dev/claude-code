@@ -149,18 +149,29 @@
   }
   .lede { margin: 0; line-height: 1.5; max-width: 58ch; }
   .zones { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
-  .zones li {
-    display: grid; grid-template-columns: 14px 1fr; gap: 3px 10px; align-items: center;
+  .zones button {
+    width: 100%; height: 100%; box-sizing: border-box; text-align: left; cursor: pointer;
+    display: grid; grid-template-columns: 26px 1fr; gap: 3px 10px; align-items: center;
     padding: 9px 12px;
     background: var(--bg); color: var(--ink);
     border: max(var(--bw), 1px) solid var(--line);
     border-radius: var(--radius);
     clip-path: var(--clip, none);
     font-family: var(--body); font-size: calc(14px * var(--bscale));
+    transition: transform 0.08s;
   }
-  .zones .sw { width: 14px; height: 14px; background: var(--accent); border: 2px solid var(--ink); box-sizing: border-box; }
+  .zones button:not(:disabled):hover { background: var(--panel); }
+  .zones button:not(:disabled):active { transform: translateY(2px); }
+  .zones button:focus-visible { outline: 3px solid var(--hot); outline-offset: 2px; }
+  .zones button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .zicon { width: 26px; height: 26px; display: block; }
+  .zones .zicon { grid-row: span 2; align-self: start; }
+  .levels .zicon { display: inline-block; width: 18px; height: 18px; margin-right: 6px; vertical-align: -3px; }
   .zones .nm { font-family: var(--display); font-size: calc(15px * var(--dscale)); line-height: 1.2; }
   .zones .nw { grid-column: 2; font-size: 0.85em; color: var(--dim); line-height: 1.3; }
+  .zones .pr { grid-column: 2; font-size: 0.85em; font-weight: 700; display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: center; }
+  .zones .pbar { flex: 1 1 60px; min-width: 50px; height: 5px; border-radius: 99px; background: color-mix(in srgb, var(--ink) 15%, transparent); overflow: hidden; }
+  .zones .pbar i { display: block; height: 100%; background: var(--accent); }
   .controls { margin: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.85em; color: var(--dim); }
   kbd { font-family: inherit; font-weight: 700; color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; background: var(--panel); }
   .row { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
@@ -189,7 +200,6 @@
     width: 100%; display: grid; gap: 3px; text-align: left; padding: 10px 12px; cursor: pointer;
     font-family: var(--body); font-size: calc(14px * var(--bscale));
   }
-  .levels .sw { display: inline-block; width: 11px; height: 11px; margin-right: 7px; border: 2px solid var(--ink); vertical-align: 1px; }
   .levels button b { font-family: var(--display); font-weight: normal; font-size: calc(16px * var(--dscale)); }
   .levels button:disabled { opacity: 0.45; cursor: not-allowed; }
   .levels button:focus-visible { outline: 3px solid var(--hot); outline-offset: 2px; }
@@ -275,8 +285,8 @@
 <div class="overlay" id="startScreen">
   <div class="sheet panel">
     <h1 class="title">Beatline Dash</h1>
-    <p class="lede">Climb stairs, leap pits, dodge saws and duck under low ceilings. Survive 45 seconds without crashing and a portal warps you to the next zone, drawn in a completely different style. Every zone runs faster and adds something new. A crash restarts the zone; the bar at the top shows how far you got, and your best is saved.</p>
-    <ul class="zones" id="zoneList"></ul>
+    <p class="lede">Climb stairs, leap pits, dodge saws and duck under low ceilings. Survive 45 seconds without crashing and a portal warps you to the next zone, drawn in a completely different style. Every zone runs faster and adds something new. A crash restarts the zone; the bar at the top shows how far you got, and your best is saved. Tap a level below to play it; beat a level to unlock the next.</p>
+    <ul class="zones" id="zoneList" aria-label="Levels: pick one to play"></ul>
     <p class="controls">
       <span><kbd>Space</kbd> <kbd>&uarr;</kbd> <kbd>W</kbd>, click or tap anywhere: jump (hold to keep jumping)</span>
       <span><kbd>&darr;</kbd> <kbd>S</kbd>, or swipe down on a touchscreen: duck</span>
@@ -3052,7 +3062,27 @@
     const flipped = playing && S.flipped && !S.dead;
     if (hudEls.grav.hidden === flipped) hudEls.grav.hidden = !flipped;
   }
+  // A little picture for each zone
+  const ZONE_ICON = {
+    meadow: `<circle cx="18" cy="7" r="4" fill="#ffd93b" stroke="#1f2d16" stroke-width="1.5"/><path d="M1 22c4-8 9-10 14-6s6 3 8 6z" fill="#74cf4a" stroke="#1f2d16" stroke-width="1.5" stroke-linejoin="round"/><path d="M7 17v-4" stroke="#1f2d16" stroke-width="1.5"/><circle cx="7" cy="12" r="2.2" fill="#ff5a4e" stroke="#1f2d16" stroke-width="1.2"/>`,
+    forge: `<path d="M3 15h16l-2 3h-4l1 4H8l1-4H5z" fill="#4a2a1c" stroke="#1a0c06" stroke-width="1.3" stroke-linejoin="round"/><path d="M11 2c3 3 5 5 5 8a4 4 0 0 1-8 0c0-2 1-3 2-5 .5 1.5 1 2 2 2.5 0-2-.5-3.5-1-5.5z" fill="#ef8a23" stroke="#a4491d" stroke-width="1.2" stroke-linejoin="round"/><path d="M12 8c1 1.5 2 2.5 2 3.5a2 2 0 0 1-4 0c0-1 .8-1.8 2-3.5z" fill="#ffd23f"/>`,
+    reef: `<path d="M2 21c3-1 6 1 10 0s7-1 10 0v2H2z" fill="#f1dca8"/><path d="M12 21v-8m0 0-4-4v-4m4 8 4-5V4m-4 9V6M8 9 5 7m11-1 3-2" fill="none" stroke="#e0607e" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>`,
+    canopy: `<path d="M12 22c0-6 0-12 1-16" stroke="#6b4a2b" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M13 6C9 2 4 3 2 7c4-1 7-1 11-1zM13 6c3-4 8-4 10 0-4-1-6-1-10 0zM13 6c-2 1-6 5-6 9 3-3 5-6 6-9zM13 6c3 1 6 5 5 9-2-3-4-6-5-9z" fill="#3f8a3c" stroke="#1f3a24" stroke-width="1" stroke-linejoin="round"/>`,
+    glacier: `<path d="M1 15h22v8H1z" fill="#6fa7d6"/><path d="M4 15 8 6l3 3 3-6 6 12z" fill="#ffffff" stroke="#3a73b0" stroke-width="1.4" stroke-linejoin="round"/><path d="M6 15h13l-3 6H9z" fill="#b9dcf5" stroke="#3a73b0" stroke-width="1.2" stroke-linejoin="round"/><path d="M1 15h22" stroke="#1f3a5c" stroke-width="1.2"/>`,
+    void: `<circle cx="12" cy="12" r="10" fill="#f2eee4" stroke="#161616" stroke-width="1.6"/><path d="M12 12c1-1 2 0 2 1s-1 3-3 3-4-2-4-4 2-6 6-6 6 3 6 6" fill="none" stroke="#161616" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="12" r="1.3" fill="#d42a3c"/>`,
+  };
+  const zoneIcon = id => `<svg class="zicon" viewBox="0 0 24 24" aria-hidden="true">${ZONE_ICON[id]}</svg>`;
+  function renderZoneList() {
+    el("zoneList").innerHTML = STYLES.map((s, i) => {
+      const open = i < bestLevel, pct = bestPct[i] || 0;
+      const status = open
+        ? `<span>${starsHTML(levelStars(i))}</span><span class="pbar" aria-hidden="true"><i style="width:${pct}%"></i></span><span>${pct}%</span>`
+        : `<span>Locked: beat level ${i} first</span>`;
+      return `<li><button type="button" data-level="${i}"${open ? "" : " disabled"} aria-label="Level ${i + 1}, ${s.name}${open ? `, best ${pct} percent` : ", locked"}">${zoneIcon(s.id)}<span class="nm">${i + 1}. ${s.name}</span><span class="nw">${s.isNew}</span><span class="pr">${status}</span></button></li>`;
+    }).join("");
+  }
   function updateBestText() {
+    renderZoneList();
     el("bestStart").innerHTML = `Best: Level <b>${bestLevel}</b>`;
     const total = Object.values(starSave).reduce((n, a) => n + a.filter(Boolean).length, 0);
     el("starTotal").innerHTML = `Stars: <b>${total}</b> / ${3 * bestLevel}`;
@@ -3061,7 +3091,7 @@
     const n = Math.max(6, bestLevel);
     el("levelGrid").innerHTML = Array.from({ length: n }, (_, i) => {
       const open = i < bestLevel;
-      return `<li><button class="panel" type="button" data-level="${i}"${open ? "" : " disabled"}><b><span class="sw" style="background:${ZONE_SWATCH[styleOf(i).id]}"></span>Level ${i + 1}</b><span>${zoneName(i)}</span><span>${open ? starsHTML(levelStars(i)) : "Locked"}</span>${open ? `<span>Best ${bestPct[i] || 0}%</span>` : ""}</button></li>`;
+      return `<li><button class="panel" type="button" data-level="${i}"${open ? "" : " disabled"}><b>${zoneIcon(styleOf(i).id)}Level ${i + 1}</b><span>${zoneName(i)}</span><span>${open ? starsHTML(levelStars(i)) : "Locked"}</span>${open ? `<span>Best ${bestPct[i] || 0}%</span>` : ""}</button></li>`;
     }).join("");
   }
 
@@ -3183,7 +3213,12 @@
       e.preventDefault();
       if (e.repeat) return;
       audio.init();
-      if (S.mode === "title") { if (el("levelScreen").hidden) startGame(); return; }
+      if (S.mode === "title") {
+        const lv = document.activeElement?.dataset?.level;
+        if (lv !== undefined && !document.activeElement.disabled) startGame(+lv);
+        else if (el("levelScreen").hidden) startGame();
+        return;
+      }
       if (S.paused) { togglePause(false); return; }
       // A focused HUD button would otherwise also "click" when Space is released.
       if (document.activeElement instanceof HTMLButtonElement) document.activeElement.blur();
@@ -3262,11 +3297,11 @@
   });
   el("quitBtn").addEventListener("click", quitToTitle);
 
-  // ---- Title screen zone list (one look for the whole menu; a swatch marks each zone) ----
-  const ZONE_SWATCH = { meadow: "#74cf4a", forge: "#ef8a23", reef: "#4aa3b8", canopy: "#ff7a3d", glacier: "#7cb2de", void: "#161616" };
-  el("zoneList").innerHTML = STYLES.map((s, i) =>
-    `<li><span class="sw" style="background:${ZONE_SWATCH[s.id]}"></span><span class="nm">${i + 1}. ${s.name}</span><span class="nw">${s.isNew}</span></li>`
-  ).join("");
+  // ---- Title screen zone list: each card starts its level (once unlocked) --
+  el("zoneList").addEventListener("click", e => {
+    const b = e.target.closest("button[data-level]");
+    if (b && !b.disabled) startGame(+b.dataset.level);
+  });
   updateBestText();
 
   // ---- Main loop ----------------------------------------------------------
