@@ -783,36 +783,43 @@
     pinch:   { r: 0.32, pump: 5,   color: '#4fc98a', shade: '#2b8755' },
     pocket:  { r: 0.24, pump: 6 },
     crumble: { r: 0.34, pump: 3.5, color: '#caa57d', shade: '#8b6947', breakAt: 1.5 },
+    undercling: { r: 0.34, pump: 5, color: '#ff7fa8', shade: '#b8456f' },  // grabbed from below
+    volume:  { r: 0.55, pump: 2.5, color: '#8fa3b8', shade: '#566a80' },   // big, easy geometric block
+    rail:    { r: 0.3,  pump: 4.5, color: '#ef5b4f', shade: '#a8322a' },   // long flat bar
     foot:    { r: 0.12 },
     ledge:   { r: 0.3,  pump: -40 },
   };
   const LEDGE_EVERY = 50;   // metres between rest ledges
 
   let holds = [];
-  const gen = { y: 0, x: 0, n: 0, sinceDyno: 0, last: null };
+  const gen = { y: 0, x: 0, n: 0, sinceDyno: 0, last: null, prevType: null };
 
   const gradeAt = y => Math.max(0, Math.floor((y - START_Y) / GRADE_EVERY));
 
   // How a grade shapes the route: spacing, sideways drift, hold size, decoys.
   function difficulty(g) {
     return {
-      gapMin: Math.min(1.1 + g * 0.1, 1.6),
-      gapMax: Math.min(1.7 + g * 0.14, 2.3),
-      dx: Math.min(1.1 + g * 0.18, 1.9),
+      gapMin: Math.min(1.4 + g * 0.08, 1.8),
+      gapMax: Math.min(1.95 + g * 0.1, 2.25),
+      dx: Math.min(1.2 + g * 0.16, 1.9),
       scale: Math.max(0.62, 1 - g * 0.07),
-      decoy: Math.min(0.35 + g * 0.08, 0.7),
+      decoy: Math.min(0.15 + g * 0.06, 0.4),
     };
   }
 
-  function pickType(g) {
+  function pickType(g, avoid) {
     const w = {
-      jug: Math.max(1.2, 8 - g * 1.6),
-      crimp: 1 + g * 1.3,
-      sloper: g >= 1 ? 0.6 + g * 0.8 : 0.4,
-      pinch: 1 + g * 0.8,
-      pocket: g >= 1 ? 0.5 + g * 0.7 : 0.25,
-      crumble: g >= 1 ? 0.4 + g * 0.6 : 0.25,
+      jug: Math.max(1, 3.5 - g * 0.6),
+      volume: Math.max(0.5, 1.4 - g * 0.2),
+      rail: 1.2,
+      pinch: 1.2 + g * 0.4,
+      crimp: 1 + g * 0.9,
+      undercling: 0.8 + g * 0.4,
+      sloper: 0.7 + g * 0.6,
+      pocket: 0.5 + g * 0.6,
+      crumble: 0.5 + g * 0.5,
     };
+    if (avoid) w[avoid] = 0;
     let total = 0;
     for (const k in w) total += w[k];
     let roll = Math.random() * total;
@@ -825,7 +832,9 @@
     const h = {
       x, y, type, route,
       r: def.r * scale * rand(0.92, 1.08),
-      rot: type === 'crimp' ? rand(-0.2, 0.2) : type === 'pinch' ? rand(-0.3, 0.3) : rand(-0.6, 0.6),
+      rot: type === 'crimp' || type === 'rail' || type === 'undercling' ? rand(-0.2, 0.2)
+        : type === 'pinch' ? rand(-0.3, 0.3) : rand(-0.6, 0.6),
+      variant: Math.floor(Math.random() * 3),   // shape variation within a type
       chalk: 0,            // white chalk mark after use
       grip: 0,             // seconds held (for slopers / crumbling holds)
       wear: 0,             // crumbling damage 0..1
@@ -897,11 +906,14 @@
 
       // clear anything the route hold would overlap
       holds = holds.filter(h => h.route || dist(h.x, h.y, nx, ny) > 0.8);
-      const type = gen.n < 4 ? 'jug' : isDyno ? (Math.random() < 0.7 ? 'jug' : 'pinch') : pickType(g);
+      const prev = gen.last && gen.last.type;
+      const repeat = prev && gen.prevType === prev ? prev : null;   // no three of a kind in a row
+      const type = gen.n < 2 ? 'jug' : isDyno ? (Math.random() < 0.6 ? 'jug' : 'volume') : pickType(g, repeat);
+      gen.prevType = prev;
       gen.last = addHold(nx, ny, type, d.scale, true);
 
       // footchip between the last two route holds
-      if (Math.random() < 0.8) {
+      if (Math.random() < 0.45) {
         const fx = clamp(lerp(gen.x, nx, 0.5) + rand(-0.6, 0.6), X_MIN - 0.3, X_MAX + 0.3);
         const fy = ny - rand(1.0, 1.35);
         if (isFree(fx, fy, 0.6)) addHold(fx, fy, 'foot');
@@ -923,8 +935,10 @@
       const x = h.grabX != null ? h.grabX : h.x;
       return [{ x: x - 0.12, y: h.y + 0.04 }, { x: x + 0.12, y: h.y + 0.04 }];
     }
-    const spread = h.type === 'crimp' ? 0.11 : h.type === 'pinch' || h.type === 'pocket' ? 0.055 : 0.09;
-    const top = h.type === 'pinch' ? h.r * 0.5 : h.type === 'crimp' ? h.r * 0.15 : 0.02;
+    const spread = h.type === 'crimp' || h.type === 'rail' ? 0.12 : h.type === 'pinch' || h.type === 'pocket' ? 0.055
+      : h.type === 'volume' ? 0.13 : 0.09;
+    const top = h.type === 'pinch' ? h.r * 0.5 : h.type === 'crimp' || h.type === 'rail' ? h.r * 0.15
+      : h.type === 'volume' ? h.r * 0.45 : h.type === 'undercling' ? -h.r * 0.45 : 0.02;
     return [{ x: h.x - spread, y: h.y + top }, { x: h.x + spread, y: h.y + top }];
   }
 
@@ -1243,7 +1257,7 @@
       src.start(t0, Math.random() * 0.5);
       src.stop(t0 + dur + 0.05);
     }
-    const PITCH = { jug: 1, crimp: 1.45, sloper: 0.8, pinch: 1.2, pocket: 1.3, crumble: 0.9, ledge: 0.7 };
+    const PITCH = { jug: 1, crimp: 1.45, sloper: 0.8, pinch: 1.2, pocket: 1.3, crumble: 0.9, ledge: 0.7, undercling: 1.1, volume: 0.6, rail: 1.25 };
     return {
       init,
       get muted() { return muted; },
@@ -2359,18 +2373,119 @@
     switch (h.type) {
       case 'jug': {
         shadow(r * 1.05, r * 0.85);
-        ctx.fillStyle = def.shade;
-        ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.82, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = def.color;
-        ctx.beginPath(); ctx.ellipse(-r * 0.05, r * 0.08, r * 0.86, r * 0.62, 0, 0, Math.PI * 2); ctx.fill();
-        // the incut lip you grab
-        ctx.fillStyle = 'rgba(40,20,0,0.55)';
-        ctx.beginPath(); ctx.ellipse(0, -r * 0.32, r * 0.62, r * 0.2, 0, 0, Math.PI * 2); ctx.fill();
+        if (h.variant === 1) {
+          // bucket: squared-off with a deep scoop
+          ctx.fillStyle = def.shade;
+          roundRect(-r, -r * 0.75, r * 2, r * 1.5, r * 0.45); ctx.fill();
+          ctx.fillStyle = def.color;
+          roundRect(-r * 0.9, -r * 0.55, r * 1.8, r * 1.2, r * 0.4); ctx.fill();
+          ctx.fillStyle = 'rgba(40,20,0,0.6)';
+          roundRect(-r * 0.7, -r * 0.6, r * 1.4, r * 0.45, r * 0.2); ctx.fill();
+        } else if (h.variant === 2) {
+          // horn: a teardrop you can wrap a hand around
+          ctx.fillStyle = def.shade;
+          ctx.beginPath();
+          ctx.moveTo(-r, r * 0.5);
+          ctx.quadraticCurveTo(-r * 0.9, -r * 0.9, r * 0.2, -r * 0.95);
+          ctx.quadraticCurveTo(r * 1.15, -r * 0.6, r, r * 0.55);
+          ctx.quadraticCurveTo(0, r * 0.95, -r, r * 0.5);
+          ctx.fill();
+          ctx.fillStyle = def.color;
+          ctx.beginPath(); ctx.ellipse(0, r * 0.05, r * 0.72, r * 0.55, -0.3, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = 'rgba(40,20,0,0.55)';
+          ctx.beginPath(); ctx.ellipse(r * 0.05, -r * 0.4, r * 0.5, r * 0.17, -0.2, 0, Math.PI * 2); ctx.fill();
+        } else {
+          ctx.fillStyle = def.shade;
+          ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.82, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = def.color;
+          ctx.beginPath(); ctx.ellipse(-r * 0.05, r * 0.08, r * 0.86, r * 0.62, 0, 0, Math.PI * 2); ctx.fill();
+          // the incut lip you grab
+          ctx.fillStyle = 'rgba(40,20,0,0.55)';
+          ctx.beginPath(); ctx.ellipse(0, -r * 0.32, r * 0.62, r * 0.2, 0, 0, Math.PI * 2); ctx.fill();
+        }
         chalkMark(-r * 0.05, -r * 0.5, r * 0.5, r * 0.16);
+        break;
+      }
+      case 'undercling': {
+        // upside-down lip: you pull up on it from underneath
+        shadow(r * 1.05, r * 0.8, 0.12, -0.05);
+        ctx.fillStyle = def.shade;
+        ctx.beginPath(); ctx.ellipse(0, 0, r * 1.1, r * 0.72, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = def.color;
+        ctx.beginPath(); ctx.ellipse(r * 0.04, -r * 0.1, r * 0.95, r * 0.52, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(60,10,30,0.55)';
+        ctx.beginPath(); ctx.ellipse(0, r * 0.36, r * 0.7, r * 0.18, 0, 0, Math.PI * 2); ctx.fill();
+        // little arrow-ish ridge so it reads as "grab from below"
+        ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+        ctx.lineWidth = Math.max(1, r * 0.1);
+        ctx.beginPath(); ctx.moveTo(-r * 0.3, -r * 0.05); ctx.lineTo(0, -r * 0.3); ctx.lineTo(r * 0.3, -r * 0.05); ctx.stroke();
+        chalkMark(0, r * 0.5, r * 0.5, r * 0.13);
+        break;
+      }
+      case 'volume': {
+        // a big geometric block with three shaded faces
+        const pts = h.variant === 1
+          ? [[-r * 1.1, r * 0.6], [r * 1.1, r * 0.6], [r * 0.2, -r * 0.9]]
+          : h.variant === 2
+            ? [[-r * 1.0, r * 0.7], [r * 0.9, r * 0.75], [r * 1.0, -r * 0.5], [-r * 0.6, -r * 0.8]]
+            : [[-r, r * 0.65], [r, r * 0.65], [0, -r * 0.95]];
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath(); pts.forEach(([a, b]) => ctx.lineTo(a + r * 0.12, b + r * 0.18)); ctx.closePath(); ctx.fill();
+        const cx = r * 0.05, cy = r * 0.05;
+        for (let i = 0; i < pts.length; i++) {
+          const [a1, b1] = pts[i], [a2, b2] = pts[(i + 1) % pts.length];
+          ctx.fillStyle = i === pts.length - 1 ? def.color : i === 0 ? def.shade : '#72879d';
+          ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(a1, b1); ctx.lineTo(a2, b2); ctx.closePath(); ctx.fill();
+        }
+        ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); pts.forEach(([a, b]) => { ctx.moveTo(cx, cy); ctx.lineTo(a, b); }); ctx.stroke();
+        chalkMark(0, -r * 0.45, r * 0.45, r * 0.12);
+        break;
+      }
+      case 'rail': {
+        // long flat rail with bolt caps
+        const w = r * 1.9, t = r * 0.3;
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        roundRect(-w + r * 0.1, -t + r * 0.18, w * 2, t * 2.2, t); ctx.fill();
+        ctx.fillStyle = def.shade;
+        roundRect(-w, -t, w * 2, t * 2.2, t); ctx.fill();
+        ctx.fillStyle = def.color;
+        roundRect(-w, -t, w * 2, t * 1.3, t * 0.7); ctx.fill();
+        ctx.fillStyle = 'rgba(30,30,36,0.55)';
+        for (const bx of [-w * 0.55, w * 0.55]) { ctx.beginPath(); ctx.arc(bx, t * 0.4, Math.max(1.5, t * 0.3), 0, Math.PI * 2); ctx.fill(); }
+        chalkMark(0, -t * 0.5, w * 0.6, t * 0.45);
         break;
       }
       case 'crimp': {
         const w = r * 1.3, t = r * 0.34;
+        if (h.variant === 1) {
+          // curved "smile" edge
+          ctx.lineCap = 'round';
+          ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+          ctx.lineWidth = t * 2;
+          ctx.beginPath(); ctx.arc(r * 0.1, -r * 1.05, r * 1.35, Math.PI * 0.28, Math.PI * 0.72); ctx.stroke();
+          ctx.strokeStyle = def.shade;
+          ctx.beginPath(); ctx.arc(0, -r * 1.2, r * 1.35, Math.PI * 0.28, Math.PI * 0.72); ctx.stroke();
+          ctx.strokeStyle = def.color;
+          ctx.lineWidth = t * 1.1;
+          ctx.beginPath(); ctx.arc(0, -r * 1.28, r * 1.35, Math.PI * 0.3, Math.PI * 0.7); ctx.stroke();
+          chalkMark(0, -t * 0.4, w * 0.6, t * 0.45);
+          break;
+        }
+        if (h.variant === 2) {
+          // two small chips side by side
+          for (const ox of [-w * 0.52, w * 0.52]) {
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            roundRect(ox - w * 0.42 + r * 0.08, -t + r * 0.16, w * 0.84, t * 2.1, t); ctx.fill();
+            ctx.fillStyle = def.shade;
+            roundRect(ox - w * 0.42, -t, w * 0.84, t * 2, t); ctx.fill();
+            ctx.fillStyle = def.color;
+            roundRect(ox - w * 0.4, -t, w * 0.8, t * 1.2, t * 0.6); ctx.fill();
+          }
+          chalkMark(0, -t * 0.4, w * 0.75, t * 0.5);
+          break;
+        }
         ctx.fillStyle = 'rgba(0,0,0,0.3)';
         roundRect(-w + r * 0.08, -t + r * 0.16, w * 2, t * 2.1, t); ctx.fill();
         ctx.fillStyle = def.shade;
@@ -2395,6 +2510,17 @@
       }
       case 'pinch': {
         const w = r * 0.52, hh = r * 1.2;
+        if (h.variant === 1) {
+          // wedge / tooth
+          ctx.fillStyle = 'rgba(0,0,0,0.3)';
+          ctx.beginPath(); ctx.moveTo(-w + r * 0.1, hh + r * 0.15); ctx.lineTo(w * 1.1 + r * 0.1, hh + r * 0.15); ctx.lineTo(r * 0.1, -hh + r * 0.15); ctx.fill();
+          ctx.fillStyle = def.shade;
+          ctx.beginPath(); ctx.moveTo(-w * 1.1, hh); ctx.lineTo(w * 1.1, hh); ctx.lineTo(0, -hh); ctx.fill();
+          ctx.fillStyle = def.color;
+          ctx.beginPath(); ctx.moveTo(-w * 1.1, hh); ctx.lineTo(0, hh * 0.9); ctx.lineTo(0, -hh); ctx.fill();
+          chalkMark(0, -hh * 0.4, w * 0.45, hh * 0.25);
+          break;
+        }
         ctx.fillStyle = 'rgba(0,0,0,0.3)';
         roundRect(-w + r * 0.1, -hh + r * 0.15, w * 2, hh * 2, w); ctx.fill();
         ctx.fillStyle = def.shade;
