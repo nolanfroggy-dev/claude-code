@@ -285,7 +285,7 @@
 <div class="overlay" id="startScreen">
   <div class="sheet panel">
     <h1 class="title">Beatline Dash</h1>
-    <p class="lede">Climb stairs, leap pits, dodge saws and duck under low ceilings. Survive 45 seconds without crashing and a portal warps you to the next zone, drawn in a completely different style. Every zone runs faster and adds something new. A crash restarts the zone; the bar at the top shows how far you got, and your best is saved. Tap a level below to play it; beat a level to unlock the next.</p>
+    <p class="lede">Climb stairs, leap pits, dodge saws and duck under low ceilings. Survive 60 seconds without crashing and a portal warps you to the next zone, drawn in a completely different style. Every zone runs faster and adds something new. A crash restarts the zone; the bar at the top shows how far you got, and your best is saved. Tap a level below to play it; beat a level to unlock the next.</p>
     <ul class="zones" id="zoneList" aria-label="Levels: pick one to play"></ul>
     <p class="controls">
       <span><kbd>Space</kbd> <kbd>&uarr;</kbd> <kbd>W</kbd>, click or tap anywhere: jump (hold to keep jumping)</span>
@@ -331,7 +331,7 @@
   "use strict";
 
   // ---- Tuning -------------------------------------------------------------
-  const LEVEL_SECONDS = 45;       // consecutive seconds alive needed to reach the next zone
+  const LEVEL_SECONDS = 60;       // consecutive seconds alive needed to reach the next zone
   const B = 40;                   // one block, in logical pixels
   const P = 34;                   // player cube size
   const DUCK_H = 17;              // player hitbox height while ducking
@@ -1536,11 +1536,13 @@
       // terrain
       run(n) {
         const last = c.floors[c.floors.length - 1];
-        if (last && last.top === c.f && Math.abs(last.x + last.w - c.x) < 1e-6) last.w += n;
-        else c.floors.push({ t: "f", x: c.x, w: n, top: c.f });
+        if (last && !c.brk && last.top === c.f && Math.abs(last.x + last.w - c.x) < 1e-6) last.w += n;
+        else c.floors.push(c.ugOn ? { t: "f", x: c.x, w: n, top: c.f, ug: true } : { t: "f", x: c.x, w: n, top: c.f });
+        c.brk = false;
         c.x += n;
         return c;
       },
+      lava(x, w) { c.o.push({ t: "lava", x, w, top: c.f - 0.7 }); return c; },
       up(d = 1) { c.f += d; c.hi = Math.max(c.hi, c.f); return c; },
       down(d = 1) { c.f -= d; c.lo = Math.min(c.lo, c.f); return c; },
       gap(n) { c.x += n; return c; },
@@ -2374,7 +2376,7 @@
       c.down(3);
       c.overhang(ov0, ovw, 3.3, 2.2);            // the hill above the cave; the hole is wide enough that a jump off the edge lands inside
       c.run(ov0 + ovw + w(3) - c.x);
-      c.spike(ov0 + w(3.5)).spike(ov0 + w(9));
+      c.spike(ov0 + w(3.5)).spike(ov0 + ovw - w(3));
     } },
     { lvl: 0, tier: 2, name: "burrow", build(c, k, w) {
       // a longer cave with a spike pair inside and a step back up at the exit
@@ -2394,7 +2396,7 @@
       c.down(3);
       c.overhang(ov0, ovw, 3.3, 2.2);
       c.run(ov0 + ovw + w(3) - c.x);
-      c.saw("ground", ov0 + w(4)).spike(ov0 + w(10));
+      c.saw("ground", ov0 + w(4)).spike(ov0 + ovw - w(3));
     } },
     { lvl: 2, tier: 2, name: "sea cave", build(c, k, w) {
       const L = stepLen(k);
@@ -2403,7 +2405,7 @@
       c.down(3);
       c.overhang(ov0, ovw, 3.3, 2.2);
       c.run(ov0 + ovw + w(3) - c.x);
-      c.spike(ov0 + w(4)).spike(ov0 + w(9), 2);
+      c.spike(ov0 + w(4)).spike(ov0 + ovw - w(3.5), 2);
     } },
     { lvl: 3, tier: 2, name: "root hollow", build(c, k, w) {
       const L = stepLen(k);
@@ -2412,7 +2414,7 @@
       c.down(3);
       c.overhang(ov0, ovw, 3.3, 2.2);
       c.run(ov0 + ovw + w(3) - c.x);
-      c.spike(ov0 + w(3.5), 2).spike(ov0 + w(10));
+      c.spike(ov0 + w(3.5), 2).spike(ov0 + ovw - w(3));
     } },
 
     // ---- Orbs and pads: climbs, gravity flips and dashes ----
@@ -2570,6 +2572,51 @@
     c.name = "ball corridor";
     return c;
   }
+  // Underground: step down a quarry into the earth, run a stone cavern with its
+  // own hazards (crystal spikes, falling stalactites, lava pits, crushers), then
+  // spring back up to the surface.
+  function buildUnderground(k, level) {
+    const c = builder(k), w = n => Math.max(1, Math.round(n * k)), L = stepLen(k);
+    const DEPTH = 8, CLEAR = 4.6, bottom = -DEPTH;
+    c.run(3);
+    for (let i = 0; i < 4; i++) c.down(2).run(w(3));
+    const xs = c.x, ceil = bottom + CLEAR;
+    c.brk = true; c.ugOn = true;
+    c.run(w(3.5));
+    const xEnd = xs + Math.round((level >= 3 ? 14 : 12) * 8.25 * k);
+    const pats = {
+      crystals: () => c.spike(c.x, level >= 2 && Math.random() < 0.5 ? 2 : 1).run(w(4.5)),
+      lava: () => { const g = w(2.6); c.lava(c.x, g); c.gap(g).run(w(3.5)); },
+      stalactite: () => c.fall(c.x, 1).run(1 + w(4.5)),
+      crusher: () => c.slide(c.x, "gate", 1, 2).run(1 + w(4)),
+      ledge: () => (c.f === bottom ? c.up().run(L) : c.down().run(w(3.5))),
+    };
+    const names = Object.keys(pats);
+    let prev = "";
+    while (c.x < xEnd - w(5)) {
+      let n;
+      do n = names[Math.floor(Math.random() * names.length)]; while (n === prev);
+      prev = n;
+      pats[n]();
+    }
+    if (c.f !== bottom) c.down().run(w(3.5));
+    c.run(w(1.5));
+    const xe = c.x;
+    c.brk = true; c.ugOn = false;
+    // springs and steps back up to the surface
+    c.pad(c.x).run(w(2.5)).up(3).run(w(4));
+    c.pad(c.x).run(w(2.5)).up(3).run(w(6.5));
+    c.up().run(L).up().run(w(3.5));
+    for (const o of c.o) {
+      if (o.x < xs || o.x >= xe) continue;
+      if (o.t === "s") o.crystal = true;
+      if (o.t === "fb" || o.t === "mb") o.uceil = ceil;
+    }
+    c.o.push({ t: "ug", x: xs, w: xe - xs, ceil, surface: 0 });
+    c.allowLow = true;
+    c.name = "underground";
+    return c;
+  }
   function buildStar(k, which) {
     const ch = STAR_CHUNKS[which ?? Math.floor(Math.random() * STAR_CHUNKS.length)], c = buildChunk(ch, k);
     c.name = ch.name;
@@ -2583,8 +2630,8 @@
     const o = { t: s.t, id: nextId++, seed: (Math.random() * 1e9) | 0, used: false };
     const X = x0 + s.x * B, H = v => (hb + v) * B;
     switch (s.t) {
-      case "f": Object.assign(o, { x: X, w: s.w * B, top: H(s.top), bot: -4000 }); break;
-      case "s": Object.assign(o, { x: X, w: B, base: H(s.base), dir: s.dir }); break;
+      case "f": Object.assign(o, { x: X, w: s.w * B, top: H(s.top), bot: -4000 }); if (s.ug) o.ug = true; break;
+      case "s": Object.assign(o, { x: X, w: B, base: H(s.base), dir: s.dir }); if (s.crystal) o.crystal = true; break;
       case "b": Object.assign(o, { x: X, w: s.w * B, bot: H(s.bot), top: H(s.top) }); if (s.terrain) Object.assign(o, { terrain: true, back: H(s.back) }); break;
       case "p": Object.assign(o, { x: X, w: B, base: H(s.base), kind: s.kind || "yellow", dir: s.dir || 1 }); break;
       case "o": Object.assign(o, { x: X, w: B, cy: H(s.cy), kind: s.kind || "yellow" }); break;
@@ -2593,13 +2640,16 @@
       case "sp": Object.assign(o, { x: X, w: B, mult: s.mult, base: H(0), icon: speedName(s.mult) }); break;
       case "gp": Object.assign(o, { x: X, w: B, flip: s.flip, base: H(s.base), ceil: H(s.base) + CEIL_H }); break;
       case "roof": Object.assign(o, { x: X, w: s.w * B, ceil: H(s.ceil) }); break;
+      case "ug": Object.assign(o, { x: X, w: s.w * B, ceil: H(s.ceil), surface: H(s.surface), tip: tipsSeen.underground ? null : "underground" }); break;
+      case "lava": Object.assign(o, { x: X, w: s.w * B, top: H(s.top) }); break;
       case "lc": Object.assign(o, { x: X, w: s.w * B, bottom: H(s.bottom) + (s.clear ? s.clear * B : LOW_CEIL), cave: !!s.clear }); break;
-      case "fb": Object.assign(o, { x: X, w: s.w * B, hh: s.h, land: H(s.land), start: H(s.land) + 6 * B, bot: H(s.land) + 6 * B, vy: 0, state: "wait", timer: 0 }); break;
+      case "fb": Object.assign(o, { x: X, w: s.w * B, hh: s.h, land: H(s.land), start: H(s.land) + 6 * B, bot: H(s.land) + 6 * B, vy: 0, state: "wait", timer: 0 }); if (s.uceil !== undefined) { o.ug = true; o.uceil = H(s.uceil); } break;
       case "mb": {
         const base = H(s.base);
         Object.assign(o, { x: X, w: s.w * B, hh: s.h, kind: s.kind, d0: s.settle * B * k, L: 7 * B });
         if (s.kind === "gate") { o.rest = base + 64; o.far = base; } else { o.rest = base; o.far = base + 96; }
         o.bot = o.far;
+        if (s.uceil !== undefined) { o.ug = true; o.uceil = H(s.uceil); }
         break;
       }
       case "saw": {
@@ -2657,7 +2707,7 @@
     shake: 0, flash: 0,
     sim: false, fixedSpeed: 0, noSpawn: false,
     pmode: "cube", secBase: 0, speedMult: 1, planMult: 1, dashT: 0,
-    runStars: new Set(), events: [], starNext: 0, airTop: 0, airFrom: 0,
+    runStars: new Set(), events: [], starNext: 0, airTop: 0, airFrom: 0, killH: -100, inUG: false,
   };
   const particles = [];
   let camH = 0;   // vertical camera: how far above the base floor the view is centred (px)
@@ -2808,6 +2858,7 @@
     flip: "<b>Gravity flip!</b>You'll run on the ceiling until the next portal. Jumping still works, just upside down.",
     ship: "<b>Ship!</b>Hold to fly up, let go to sink. Touching anything crashes, even the floor.",
     ball: "<b>Ball!</b>Tap to swap between the floor and the ceiling.",
+    underground: "<b>Underground!</b>Watch for crystal spikes, falling stalactites, crushers and lava.",
   };
   let tipTimer = 0;
   function showToast(html, ms) {
@@ -2877,12 +2928,13 @@
     if (S.level < 2) return q < 0.2 ? [1, 0.35, 0] : q < 0.45 ? [0.5, 1, 0.25] : q < 0.7 ? [0.2, 1, 0.6] : [0, 0.4, 1];
     return q < 0.25 ? [1, 0.15, 0] : q < 0.5 ? [0.6, 1, 0.1] : q < 0.75 ? [0.25, 1, 0.45] : [0, 0.3, 1];
   }
-  // Special sections per level: three star routes, a ship tunnel from level 2
-  // and a ball corridor from level 4, at fixed points of the level's clock.
+  // Special sections per level: three star routes, an underground stone cavern,
+  // a ship tunnel from level 2 and a ball corridor from level 4, at fixed points
+  // of the level's clock.
   function planEvents() {
-    const ev = [{ at: 0.15, kind: "star" }, { at: 0.5, kind: "star" }, { at: 0.82, kind: "star" }];
-    if (S.level >= 1) ev.push({ at: 0.25, kind: "ship" });
-    if (S.level >= 3) ev.push({ at: 0.64, kind: "ball" });
+    const ev = [{ at: 0.12, kind: "star" }, { at: 0.62, kind: "star" }, { at: 0.9, kind: "star" }, { at: 0.38, kind: "underground" }];
+    if (S.level >= 1) ev.push({ at: 0.2, kind: "ship" });
+    if (S.level >= 3) ev.push({ at: 0.74, kind: "ball" });
     S.events = ev.sort((a, b) => a.at - b.at);
     S.starNext = 0;
   }
@@ -2891,9 +2943,9 @@
     const m = pace === "slow" ? 0.8 : pace === "fast" ? (S.level >= 2 && Math.random() < 0.4 ? 1.5 : 1.25) : 1;
     return clamp(m, 0.8 / kBase, 1.94 / kBase);   // stay inside the speeds every chunk is checked at
   }
-  function fits(c, room) { return S.hb + c.lo >= 0 && S.hb + c.hi <= MAX_HB && c.x / (8.25 * c.k) <= room; }
+  function fits(c, room) { return (c.allowLow || S.hb + c.lo >= 0) && S.hb + c.hi <= MAX_HB && c.x / (8.25 * c.k) <= room; }
   function special(kind, kBase, room) {
-    const c = kind === "ship" ? buildShip(kBase, S.level) : kind === "ball" ? buildBall(kBase, S.level) : buildStar(kBase);
+    const c = kind === "ship" ? buildShip(kBase, S.level) : kind === "ball" ? buildBall(kBase, S.level) : kind === "underground" ? buildUnderground(kBase, S.level) : buildStar(kBase);
     c.k = kBase; c.mult = 1;
     return fits(c, room) ? c : null;
   }
@@ -2989,7 +3041,16 @@
   // ---- Physics ------------------------------------------------------------
   // Moving obstacles are driven by the player's distance, not the clock, so
   // each one is guaranteed to be in its resting pose when the player reaches it.
-  const KILL_H = -100;                     // falling this far below the base floor means you fell into a pit
+  const KILL_H = -100;                     // falling this far below the lowest nearby floor means you fell into a pit
+  function killHeight() {
+    const p = S.player;
+    let lo = Infinity;
+    for (const o of S.objs) {
+      if (o.x > p.x + 8 * B) break;
+      if (o.t === "f" && o.x + o.w > p.x - 3 * B) lo = Math.min(lo, o.top);
+    }
+    return (lo === Infinity ? 0 : lo) + KILL_H;
+  }
   const bob = (d, d0, L) => (d <= d0 ? 0 : 0.5 - 0.5 * Math.cos((TAU * (d - d0)) / L));
   function updateDynamics(dt) {
     const p = S.player, sp = speed();
@@ -3063,6 +3124,9 @@
         case "roof":
           if (mode === "ship" && p.h + ph > o.ceil) return die();
           break;
+        case "lava":
+          if (p.x + P - 4 > o.x && p.x + 4 < o.x + o.w && p.h < o.top) return die();
+          break;
         case "s": {
           const cx = o.x + B / 2;
           if (p.x + P - 4 > cx - 8 && p.x + 4 < cx + 8) {
@@ -3117,7 +3181,7 @@
           break;
       }
     }
-    if (p.h < KILL_H || p.h > KILL_TOP) return die();
+    if (p.h < S.killH || p.h > KILL_TOP) return die();
     p.grounded = grounded;
     if (!grounded) return;
     if (mode === "cube" && (S.held || S.buffer > 0)) { p.vy = (S.flipped ? -1 : 1) * JUMP_V; p.grounded = false; S.buffer = 0; }
@@ -3125,6 +3189,7 @@
   }
   function physicsSteps(dt) {
     const n = Math.ceil(dt / (1 / 240) - 1e-9), h = dt / n;
+    S.killH = killHeight();
     for (let i = 0; i < n && !S.dead; i++) step(h);
     S.buffer = Math.max(0, S.buffer - dt);
   }
@@ -3143,7 +3208,7 @@
       target = Math.max(target, S.surf - 3 * B, p.h - 170);           // follow climbs and big bounces
     }
     const ease = 1 - Math.exp(-dt * 3.5);
-    camH += (Math.max(0, target) - camH) * ease;
+    camH += (target - camH) * ease;
     camSurf += ((S.pmode !== "cube" ? S.secBase : S.surf) - camSurf) * ease;
     // pull back slightly in ship/ball sections and while bouncing high off orbs and pads
     if (S.pmode === "cube" && Math.abs(p.h - S.surf) > 2.5 * B) zoomHold = 1.4;
@@ -3180,14 +3245,15 @@
     for (const o of S.objs) {
       if (o.t !== "f") continue;
       const last = floors[floors.length - 1];
-      if (last && last.top === o.top && Math.abs(last.x + last.w - o.x) < 1) last.w = o.x + o.w - last.x;
-      else floors.push({ x: o.x, w: o.w, top: o.top });
+      if (last && last.top === o.top && !!last.ug === !!o.ug && Math.abs(last.x + last.w - o.x) < 1) last.w = o.x + o.w - last.x;
+      else floors.push({ x: o.x, w: o.w, top: o.top, ug: !!o.ug });
     }
     const sn = v => (st.pixel ? Math.round(v / PX) * PX : v);
     for (const f of floors) {
       const x0 = f.x - camX, x1 = x0 + f.w;
       if (x1 < vL - 40 || x0 > vR + 40) continue;
       const cx0 = sn(Math.max(x0, vL - 40)), cx1 = sn(Math.min(x1, vR + 40));
+      if (f.ug) { stoneGround(g, cx0 - 1, cx1 + 1, GROUND - f.top, wBot); continue; }
       g.save();
       g.beginPath(); g.rect(cx0 - 0.5, wTop - 60, cx1 - cx0 + 1, wBot - wTop + 120); g.clip();
       g.translate(0, -f.top);
@@ -3201,12 +3267,157 @@
       if (x1 < vL - 40 || x0 > vR + 40) continue;
       const touchPrev = prev && Math.abs(prev.x + prev.w - f.x) < 1;
       const touchNext = next && Math.abs(f.x + f.w - next.x) < 1;
-      if (!touchPrev) st.side(g, x0, y, wBot);
-      else if (prev.top < f.top) st.side(g, x0, y, GROUND - prev.top);
-      if (!touchNext) st.side(g, x1, y, wBot);
-      else if (next.top < f.top) st.side(g, x1, y, GROUND - next.top);
+      const side = f.ug ? stoneSide : (g2, a, b, c2) => st.side(g2, a, b, c2);
+      if (!touchPrev) side(g, x0, y, wBot);
+      else if (prev.top < f.top) side(g, x0, y, GROUND - prev.top);
+      if (!touchNext) side(g, x1, y, wBot);
+      else if (next.top < f.top) side(g, x1, y, GROUND - next.top);
     }
   }
+  // ---- Underground art (shared by every zone) ------------------------------
+  const STONE = { base: "#6d717b", dark: "#4d515b", light: "#8d929c", rim: "#a3a8b1", back: "#24262d", back2: "#2e3139", ink: "#1a1b20" };
+  const ORES = [["#1e1e22", "#3a3a40"], ["#d9a878", "#8a5a34"], ["#ffd23f", "#b0800a"], ["#5ee9ff", "#1f8ea3"], ["#45dd86", "#1c7a45"], ["#e04545", "#7a1c1c"]];
+  // Stone with patches and ore clusters, painted once into a repeating tile
+  // (drawing hundreds of little shapes every frame was far too slow).
+  // Tiles are painted at screen resolution (RES device pixels per world pixel), so
+  // they can be copied without smoothing and still look sharp.
+  const STONE_TILE = 408;
+  let stoneTiles = {}, lampGlow = null, tileRes = 0;
+  function artRes() {
+    const r = Math.max(1, Math.min(4, Math.round(scale * dpr)));
+    if (r !== tileRes) { tileRes = r; stoneTiles = {}; lampGlow = null; }
+    return r;
+  }
+  function stoneTile(dim) {
+    const R = artRes();
+    if (stoneTiles[dim]) return stoneTiles[dim];
+    const T = STONE_TILE, cv = document.createElement("canvas"); cv.width = cv.height = T * R;
+    const g = cv.getContext("2d"), cs = 34, n = T / cs;
+    g.scale(R, R);
+    const rnd = rng(dim ? 977 : 331);
+    g.fillStyle = dim ? STONE.back : STONE.base; g.fillRect(0, 0, T, T);
+    for (let ci = 0; ci < n; ci++) for (let ri = 0; ri < n; ri++) {
+      const h = rnd(), cx = ci * cs + (rnd() - 0.5) * 10, cy = ri * cs + (rnd() - 0.5) * 10;
+      if (h < 0.34) {                                  // darker or lighter patch of rock
+        g.fillStyle = dim ? STONE.back2 : h < 0.17 ? STONE.dark : STONE.light;
+        g.beginPath(); g.moveTo(cx + 4, cy + 6); g.lineTo(cx + 20 + h * 20, cy + 3); g.lineTo(cx + 26, cy + 18); g.lineTo(cx + 8, cy + 22); g.closePath(); g.fill();
+      } else if (h > (dim ? 0.93 : 0.84)) {             // an ore cluster
+        const [col, edge] = ORES[Math.floor(rnd() * ORES.length)];
+        g.globalAlpha = dim ? 0.45 : 1;
+        for (let j = 0; j < 4; j++) {
+          const ox = cx + 8 + rnd() * 18, oy = cy + 8 + rnd() * 18, r = 3 + rnd() * 2;
+          g.beginPath(); g.moveTo(ox, oy - r); g.lineTo(ox + r, oy); g.lineTo(ox, oy + r); g.lineTo(ox - r, oy); g.closePath();
+          g.fillStyle = col; g.fill(); g.lineWidth = 1.2; g.strokeStyle = edge; g.stroke();
+        }
+        g.globalAlpha = 1;
+      }
+    }
+    return (stoneTiles[dim] = cv);
+  }
+  // Copies the stone tile over x0..x1 by y0..y1, anchored to the world so it
+  // scrolls with the ground (plain image copies are much cheaper than a pattern fill).
+  function stoneFill(g, x0, x1, y0, y1, dim) {
+    x0 = Math.max(x0, vL - 10); x1 = Math.min(x1, vR + 10);
+    y0 = Math.max(y0, wTop - 10); y1 = Math.min(y1, wBot + 10);
+    if (y1 <= y0 || x1 <= x0) return;
+    const T = STONE_TILE, tile = stoneTile(dim), R = tileRes;
+    const tx0 = Math.floor((camX + x0) / T) * T - camX;
+    g.imageSmoothingEnabled = false;
+    for (let tx = tx0; tx < x1; tx += T) for (let ty = Math.floor(y0 / T) * T; ty < y1; ty += T) {
+      const ax = Math.max(tx, x0), bx = Math.min(tx + T, x1), ay = Math.max(ty, y0), by = Math.min(ty + T, y1);
+      if (bx > ax && by > ay) g.drawImage(tile, (ax - tx) * R, (ay - ty) * R, (bx - ax) * R, (by - ay) * R, ax, ay, bx - ax, by - ay);
+    }
+    g.imageSmoothingEnabled = true;
+  }
+  // A pre-drawn lantern glow
+  function lampSprite() {
+    const R = artRes();
+    if (lampGlow) return lampGlow;
+    const cv = document.createElement("canvas"); cv.width = cv.height = 140 * R;
+    const g = cv.getContext("2d"), grd = g.createRadialGradient(70 * R, 70 * R, 2, 70 * R, 70 * R, 70 * R);
+    grd.addColorStop(0, "rgba(255,190,90,0.35)"); grd.addColorStop(1, "rgba(255,190,90,0)");
+    g.fillStyle = grd; g.fillRect(0, 0, 140 * R, 140 * R);
+    return (lampGlow = cv);
+  }
+  // Stone floor surface for the cavern
+  function stoneGround(g, x0, x1, y, bottom) {
+    stoneFill(g, x0, x1, y, bottom, false);
+    g.fillStyle = STONE.rim; g.fillRect(x0, y, x1 - x0, 5);
+    g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.lineWidth = 3; g.strokeStyle = STONE.ink; g.stroke();
+    const s = 26, i0 = Math.floor((camX + x0) / s) - 1, i1 = Math.ceil((camX + x1) / s) + 1;   // gravel along the top
+    g.fillStyle = STONE.dark;
+    for (let i = i0; i < i1; i++) { if (hash(i * 3.7) < 0.5) continue; const gx = i * s - camX + hash(i) * 14; if (gx > x0 && gx < x1) { g.beginPath(); g.ellipse(gx, y + 11, 3, 2, 0, 0, TAU); g.fill(); } }
+  }
+  function stoneSide(g, x, y0, y1) { g.beginPath(); g.moveTo(x, y0); g.lineTo(x, Math.min(y1, wBot)); g.lineWidth = 3; g.strokeStyle = STONE.ink; g.stroke(); }
+  // The cavern: dark rock behind, solid rock overhead with the zone's surface on top
+  function drawUnderground(g, st, x, o, t) {
+    const yc = GROUND - o.ceil, ys = GROUND - o.surface;
+    stoneFill(g, x, x + o.w, yc, wBot, true);
+    // hanging lanterns every so often, for a little warm light
+    for (let lx = Math.ceil((camX + x) / 260) * 260 + 90; lx < camX + x + o.w - 40; lx += 260) {
+      const sx = lx - camX;
+      if (sx < vL - 40 || sx > vR + 40) continue;
+      g.imageSmoothingEnabled = false; g.drawImage(lampSprite(), sx - 70, yc - 30, 140, 140); g.imageSmoothingEnabled = true;
+      g.beginPath(); g.moveTo(sx, yc); g.lineTo(sx, yc + 30); g.lineWidth = 2; g.strokeStyle = STONE.ink; g.stroke();
+      g.fillStyle = "#ffcf6b"; g.fillRect(sx - 5, yc + 30, 10, 13); g.strokeRect(sx - 5, yc + 30, 10, 13);
+    }
+    // solid rock overhead, capped with the zone's own surface
+    stoneFill(g, x, x + o.w, ys + 30, yc, false);
+    g.save(); g.beginPath(); g.rect(x, ys - 40, o.w, 72); g.clip();
+    g.translate(0, -o.surface); st.ground(g, x - 1, x + o.w + 1, GROUND + 34, t); g.restore();
+    // lumpy ceiling edge and the cave-mouth faces
+    g.beginPath(); g.moveTo(x, yc);
+    for (let px = x + 10, i = 0; px < x + o.w - 6; px += 12, i++) g.lineTo(px, yc + 3 + hash(Math.round((px + camX) / 12) * 1.3) * 8);
+    g.lineTo(x + o.w, yc); g.closePath(); g.fillStyle = STONE.dark; g.fill();
+    g.beginPath(); g.moveTo(x, yc + 4); g.lineTo(x + o.w, yc + 4); g.moveTo(x, ys); g.lineTo(x, yc); g.moveTo(x + o.w, ys); g.lineTo(x + o.w, yc);
+    g.lineWidth = 3; g.strokeStyle = STONE.ink; g.stroke();
+  }
+  function drawLava(g, x, o, t) {
+    const y = GROUND - o.top;
+    const grd = g.createLinearGradient(0, y, 0, y + 90);
+    grd.addColorStop(0, "#ffb02e"); grd.addColorStop(0.3, "#ff5a1f"); grd.addColorStop(1, "#8a1a0a");
+    g.fillStyle = grd;
+    g.beginPath(); g.moveTo(x, wBot);
+    for (let px = x; px <= x + o.w; px += 6) g.lineTo(px, y + Math.sin((px + camX) * 0.08 + t * 4) * 2.5);
+    g.lineTo(x + o.w, wBot); g.closePath(); g.fill();
+    g.fillStyle = "#ffe08a";
+    for (let i = 0; i < 3; i++) { const bx = x + ((i * 37 + t * 20) % Math.max(10, o.w)), r = 2 + ((t * 3 + i) % 1) * 3; g.beginPath(); g.arc(bx, y + 4, r, 0, TAU); g.fill(); }
+    const glow = g.createLinearGradient(0, y - 50, 0, y);
+    glow.addColorStop(0, "rgba(255,120,30,0)"); glow.addColorStop(1, "rgba(255,120,30,0.35)");
+    g.fillStyle = glow; g.fillRect(x - 10, y - 50, o.w + 20, 50);
+  }
+  function drawCrystal(g, x, by, dir, seed) {
+    const cols = [["#b98bff", "#7a4de0", "#e3d2ff"], ["#5ee9ff", "#1f8ea3", "#d6fbff"]][seed & 1];
+    const shard = (cx, w, h) => { g.beginPath(); g.moveTo(cx - w, by); g.lineTo(cx - w * 0.6, by - dir * h * 0.75); g.lineTo(cx, by - dir * h); g.lineTo(cx + w * 0.6, by - dir * h * 0.75); g.lineTo(cx + w, by); g.closePath(); };
+    for (const [cx, w, h] of [[x + 11, 6, 22], [x + 29, 6, 24], [x + 20, 8, B - 6]]) {
+      shard(cx, w, h); g.fillStyle = cols[0]; g.fill(); g.lineWidth = 2.2; g.strokeStyle = STONE.ink; g.stroke();
+      g.beginPath(); g.moveTo(cx, by - dir * h); g.lineTo(cx + w * 0.6, by - dir * h * 0.75); g.lineTo(cx + w * 0.3, by); g.closePath(); g.fillStyle = cols[1]; g.fill();
+      g.beginPath(); g.moveTo(cx - w * 0.3, by - dir * 3); g.lineTo(cx - w * 0.15, by - dir * h * 0.6); g.lineWidth = 1.5; g.strokeStyle = cols[2]; g.stroke();
+    }
+  }
+  function drawStalactite(g, x, top, w, h, falling, uceilY) {
+    g.save();
+    if (falling) { g.beginPath(); g.rect(x - 10, uceilY, w + 20, 4000); g.clip(); }
+    if (falling) {
+      g.beginPath(); g.moveTo(x + 2, top); g.lineTo(x + w - 2, top); g.lineTo(x + w * 0.62, top + h * 0.7); g.lineTo(x + w / 2, top + h); g.lineTo(x + w * 0.38, top + h * 0.7); g.closePath();
+    } else {
+      g.beginPath(); g.moveTo(x, top + h); g.lineTo(x + 3, top + h * 0.35); g.lineTo(x + w * 0.4, top + 4); g.lineTo(x + w * 0.8, top + h * 0.2); g.lineTo(x + w, top + h); g.closePath();
+    }
+    g.fillStyle = STONE.base; g.fill(); g.lineWidth = 2.6; g.strokeStyle = STONE.ink; g.stroke();
+    g.beginPath(); g.moveTo(x + w * 0.35, top + 6); g.lineTo(x + w * 0.45, top + h * 0.55); g.lineWidth = 2; g.strokeStyle = STONE.light; g.stroke();
+    g.restore();
+  }
+  function drawCrusher(g, x, o, uceilY) {
+    const tp = GROUND - (o.bot + o.hh * B), bt = GROUND - o.bot;
+    g.fillStyle = STONE.dark; g.fillRect(x + o.w / 2 - 6, uceilY, 12, tp - uceilY);
+    g.strokeStyle = STONE.ink; g.lineWidth = 2.5; g.strokeRect(x + o.w / 2 - 6, uceilY, 12, tp - uceilY);
+    stoneFill(g, x, x + o.w, tp, bt, false);
+    g.fillStyle = "#9aa3ad"; g.fillRect(x, tp + 8, o.w, 7);
+    g.beginPath(); for (let i = 0; i < 4; i++) { g.moveTo(x + 2 + i * (o.w - 4) / 3, bt); g.lineTo(x + 2 + i * (o.w - 4) / 3 + 3, bt - 6); }
+    g.lineWidth = 2; g.stroke();
+    g.lineWidth = 3; g.strokeRect(x, tp, o.w, bt - tp);
+  }
+
   // Cave roof: the zone's own ground texture, with a ragged underside and a shadowy cave behind it.
   function drawOverhang(g, st, x, o, t) {
     const yb = GROUND - o.bot, yt = GROUND - o.top, yf = GROUND - o.back;
@@ -3239,6 +3450,7 @@
     if (z !== 1) { g.translate(zx, zy); g.scale(z, z); g.translate(-zx, -zy); }
     vL = zx - zx / z; vR = zx + (viewW - zx) / z;
     wTop = zy + (-offY - cs - 20 - zy) / z; wBot = zy + (viewH - offY - cs + 20 - zy) / z;
+    for (const o of S.objs) if (o.t === "ug") { const x = o.x - camX; if (x < vR + 20 && x + o.w > vL - 20) drawUnderground(g, st, x, o, t); }
     for (const o of S.objs) if (o.t === "roof") { const x = o.x - camX; if (x < vR + 20 && x + o.w > vL - 20) st.roof(g, x, o.w, GROUND - o.ceil, t, o.seed); }
     drawTerrain(g, st, t);
     // big-moment wash: over backdrop and ground only, so obstacles stay crisp
@@ -3249,7 +3461,8 @@
       if (x > right) break;
       if (x + o.w < vL - 80) continue;
       switch (o.t) {
-        case "s": st.spike(g, x, GROUND - o.base, o.dir, o.seed); break;
+        case "s": if (o.crystal) drawCrystal(g, x, GROUND - o.base, o.dir, o.seed); else st.spike(g, x, GROUND - o.base, o.dir, o.seed); break;
+        case "lava": drawLava(g, x, o, t); break;
         case "b": {
           const bh = o.top - o.bot;
           if (o.terrain) { drawOverhang(g, st, x, o, t); break; }
@@ -3260,12 +3473,18 @@
         }
         case "mb": {
           const tp = o.bot + o.hh * B;
+          if (o.ug) { drawCrusher(g, x, o, GROUND - o.uceil); break; }
           st.track(g, x + o.w / 2, GROUND - (Math.max(o.rest, o.far) + o.hh * B + 12), GROUND - Math.min(o.rest, o.far));
           st.block(g, x, GROUND - tp, o.w, o.hh * B, o.seed);
           break;
         }
         case "fb": {
           const tp = o.bot + o.hh * B;
+          if (o.ug) {
+            const sx = o.state === "shake" && !reducedMotion ? x + Math.sin(t * 90) * 2.5 : x;
+            drawStalactite(g, sx, GROUND - tp, o.w, o.hh * B, o.state !== "rest", GROUND - o.uceil);
+            break;
+          }
           const sx = o.state === "shake" && !reducedMotion ? x + Math.sin(t * 90) * 2.5 : x;
           if (o.state === "wait" || o.state === "shake") st.chain(g, sx + o.w / 2, wTop, GROUND - tp);
           st.block(g, sx, GROUND - tp, o.w, o.hh * B, o.seed);
@@ -3485,7 +3704,7 @@
       if (fast ? n % 4 === 0 : n % 2 === 0) {
         const o = ac.createOscillator(), g = ac.createGain(), f = ac.createBiquadFilter();
         o.type = st.bass; o.frequency.value = midi(root + BASS[(fast ? n >> 2 : n >> 1) % 8]);
-        f.type = "lowpass"; f.frequency.value = st.cutoff + S.level * 40;
+        f.type = "lowpass"; f.frequency.value = (st.cutoff + S.level * 40) * (S.inUG ? 0.45 : 1);   // muffled underground
         env(g, t, 0.01, 0.28, 0.18);
         o.connect(f).connect(g).connect(master); o.start(t); o.stop(t + 0.2);
       } else if (fast ? n % 4 === 2 : S.level > 0 || n % 4 === 1) {
@@ -3699,6 +3918,8 @@
     } else {
       p.rot += dt * 6.2;
     }
+    S.inUG = false;
+    for (const o of S.objs) { if (o.x > p.x) break; if (o.t === "ug" && p.x < o.x + o.w) S.inUG = true; }
     const camRight = camLeft() + viewW;
     for (const o of S.objs) {
       if (o.x > camRight) break;
@@ -3731,7 +3952,7 @@
     if (chunk !== null) {
       S.fixedSpeed = 330 * k; S.noSpawn = true;
       let c, ch;
-      if (chunk && chunk.special) c = chunk.special === "ship" ? buildShip(k, level) : chunk.special === "ball" ? buildBall(k, level) : buildStar(k, chunk.which);
+      if (chunk && chunk.special) c = chunk.special === "ship" ? buildShip(k, level) : chunk.special === "ball" ? buildBall(k, level) : chunk.special === "underground" ? buildUnderground(k, level) : buildStar(k, chunk.which);
       else { ch = typeof chunk === "number" ? CHUNKS[chunk] : CHUNKS.find(c => c.name === chunk); c = buildChunk(ch, k); c.name = ch.name; }
       const x0 = 12 * B;
       S.objs = [
@@ -3843,7 +4064,7 @@
     }
     requestAnimationFrame(frame);
   }
-  window.__beatline = { S, setZoom: z => { zoom = z; }, particleCount: () => particles.length, render, CHUNKS, STAR_CHUNKS, buildShip, buildBall, buildStar, STYLES, solve, buildChunk, place, setEnv, startGame, spawn, speed, emit, updateCamera, updateDynamics, LEVEL_SECONDS, B, CEIL_H };
+  window.__beatline = { S, dbg: () => ({ wTop, wBot, vL, vR, camH, zoom }), buildUnderground, setZoom: z => { zoom = z; }, particleCount: () => particles.length, render, CHUNKS, STAR_CHUNKS, buildShip, buildBall, buildStar, STYLES, solve, buildChunk, place, setEnv, startGame, spawn, speed, emit, updateCamera, updateDynamics, LEVEL_SECONDS, B, CEIL_H };
   try { window.claude?.hot?.snapshot?.(() => ({ mode: S.mode, level: S.level, attempts: S.attempts })); } catch { /* no hot reload */ }
   const hot = window.claude?.hot;
   if (hot?.ready) hot.ready(boot); else boot(hot?.data ?? {});
