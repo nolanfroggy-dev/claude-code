@@ -2511,29 +2511,61 @@
 
   // Star side routes: the star sits on a harder branch; missing it drops you
   // back onto the normal path.
+  // Star routes: each star sits on a harder alternative path that splits off the
+  // main one. Skipping it is always safe; taking it costs a risk.
   const STAR_CHUNKS = [
-    { name: "star: high road", build(c, k, w) {
-      c.run(2);
-      c.block(2, 2, 1);
-      const a = 4 + w(1.6); c.block(a, 2, 1, 1);
-      const b = a + 2 + w(1.6); c.block(b, 2, 1, 2);
-      c.star(b + 1, 3.3);
-      c.run(b + 2 + w(7) - c.x);
-      c.spike(c.x - w(2.5));
-    } },
-    { name: "star: upper deck", build(c, k, w) {
-      // a thin deck you can jump onto for the star, or simply run underneath
+    { name: "star: sky path", build(c, k, w) {
+      // tap the orb at the top of a jump to reach a row of high slabs; hop the gaps between them
       c.run(3);
-      const d = c.x + w(1.5), dw = w(8);
-      c.block(d, dw, 0.6, 0.9);
-      c.star(d + dw - w(3), 1.5);
-      c.run(d + dw + w(4) - c.x);
-      c.spike(c.x).run(w(3.5));
+      const e = c.x, ox = e + w(1.3), ST = 4;
+      c.orb(ox, 2.9);
+      const pw = w(3), gp = w(2.2);
+      let x = ox + w(1.6);
+      const s1 = x;
+      for (const [i, tp] of [[0, ST], [1, ST + 1], [2, ST + 0.5]]) {
+        c.block(x, pw, 0.6, tp - 0.6);
+        if (i === 2) c.star(x + pw - 1, tp + 0.2);
+        x += pw + (i < 2 ? gp : 0);
+      }
+      c.run(x + w(4) - c.x);
+      c.spike(s1 + Math.floor(pw / 2));              // the main path underneath has its own, easier hazard
+      c.hi = Math.max(c.hi, ST + 1); c.allowHigh = true;
     } },
-    { name: "star: pillar", build(c, k, w) {
-      c.run(3).gap(w(1.6)).run(1);
-      c.star(c.x - 0.5, 0);
-      c.gap(w(1.6)).run(w(5));
+    { name: "star: broken bridge", build(c, k, w) {
+      // the safe way drops into a trench; the star is on a broken bridge across the top
+      const T = 4;
+      c.run(3);
+      const x0 = c.x;
+      c.down(T);
+      const pw = w(2.5), gp = w(2.2);
+      let x = x0 + w(2.4);
+      for (let i = 0; i < 3; i++) {
+        c.block(x, pw, 0.6, T - 0.6);
+        if (i === 1) c.spike(x + Math.floor(pw / 2), 1, T);
+        if (i === 2) c.star(x + pw / 2, T + 0.2);
+        x += pw + gp;
+      }
+      c.run(x - c.x + w(1));
+      c.spike(x0 + w(6.5));
+      c.pad(c.x).run(w(2.5)).up(T).run(w(4));
+      c.allowLow = true;
+    } },
+    { name: "star: secret pit", build(c, k, w) {
+      // what looks like a pit drops into a hidden tunnel with the star; a spring
+      // under a second hole throws you back up. Jump the holes to skip it.
+      const D = 4.5;
+      c.run(3);
+      const x0 = c.x;
+      c.down(D);
+      const h1 = w(2.4), L1 = w(13), h2 = w(3.8);
+      const s0 = x0 + h1;
+      c.overhang(s0, L1, D - 1.1, 1.1);              // the ground you run on, with the tunnel under it
+      c.run(s0 + L1 - c.x);
+      c.spike(s0 + w(5)).spike(s0 + w(9.5), 2);
+      c.star(s0 + L1 - w(2), 0.2);
+      c.pad(c.x + 1.2).run(h2);                      // clear of the tunnel roof, so the launch never clips it
+      c.up(D).run(w(4.5));
+      c.allowLow = true;
     } },
   ];
   // Ship tunnel: floor, ceiling and pillar gates to weave through. Tighter in later levels.
@@ -2643,7 +2675,13 @@
       case "ug": Object.assign(o, { x: X, w: s.w * B, ceil: H(s.ceil), surface: H(s.surface), tip: tipsSeen.underground ? null : "underground" }); break;
       case "lava": Object.assign(o, { x: X, w: s.w * B, top: H(s.top) }); break;
       case "lc": Object.assign(o, { x: X, w: s.w * B, bottom: H(s.bottom) + (s.clear ? s.clear * B : LOW_CEIL), cave: !!s.clear }); break;
-      case "fb": Object.assign(o, { x: X, w: s.w * B, hh: s.h, land: H(s.land), start: H(s.land) + 6 * B, bot: H(s.land) + 6 * B, vy: 0, state: "wait", timer: 0 }); if (s.uceil !== undefined) { o.ug = true; o.uceil = H(s.uceil); } break;
+      case "fb": Object.assign(o, { x: X, w: s.w * B, hh: s.h, land: H(s.land), start: H(s.land) + 6 * B, bot: H(s.land) + 6 * B, vy: 0, state: "wait", timer: 0 });
+        if (s.uceil !== undefined) {
+          // a stalactite: hangs in plain sight under the ceiling, shakes for a long time and lands well before you get there
+          const st = H(s.uceil) - s.h * B;
+          Object.assign(o, { ug: true, uceil: H(s.uceil), start: st, bot: st, shakeT: 0.7, lead: 1.1 });
+        }
+        break;
       case "mb": {
         const base = H(s.base);
         Object.assign(o, { x: X, w: s.w * B, hh: s.h, kind: s.kind, d0: s.settle * B * k, L: 7 * B });
@@ -2932,9 +2970,10 @@
   // a ship tunnel from level 2 and a ball corridor from level 4, at fixed points
   // of the level's clock.
   function planEvents() {
-    const ev = [{ at: 0.12, kind: "star" }, { at: 0.62, kind: "star" }, { at: 0.9, kind: "star" }, { at: 0.38, kind: "underground" }];
-    if (S.level >= 1) ev.push({ at: 0.2, kind: "ship" });
-    if (S.level >= 3) ev.push({ at: 0.74, kind: "ball" });
+    // spaced so that no section runs into the next one: star, ship, star, underground, star, ball
+    const ev = [{ at: 0.08, kind: "star" }, { at: 0.3, kind: "star" }, { at: 0.72, kind: "star" }, { at: 0.36, kind: "underground" }];
+    if (S.level >= 1) ev.push({ at: 0.13, kind: "ship" });
+    if (S.level >= 3) ev.push({ at: 0.8, kind: "ball" });
     S.events = ev.sort((a, b) => a.at - b.at);
     S.starNext = 0;
   }
@@ -2943,9 +2982,15 @@
     const m = pace === "slow" ? 0.8 : pace === "fast" ? (S.level >= 2 && Math.random() < 0.4 ? 1.5 : 1.25) : 1;
     return clamp(m, 0.8 / kBase, 1.94 / kBase);   // stay inside the speeds every chunk is checked at
   }
-  function fits(c, room) { return (c.allowLow || S.hb + c.lo >= 0) && S.hb + c.hi <= MAX_HB && c.x / (8.25 * c.k) <= room; }
+  function fits(c, room) { return (c.allowLow || S.hb + c.lo >= 0) && (c.allowHigh || S.hb + c.hi <= MAX_HB) && c.x / (8.25 * c.k) <= room; }
   function special(kind, kBase, room) {
-    const c = kind === "ship" ? buildShip(kBase, S.level) : kind === "ball" ? buildBall(kBase, S.level) : kind === "underground" ? buildUnderground(kBase, S.level) : buildStar(kBase);
+    if (kind === "star") {
+      // try every star route (in random order) before giving up on this star
+      const order = STAR_CHUNKS.map((_, i) => i).sort(() => Math.random() - 0.5);
+      for (const i of order) { const c = buildStar(kBase, i); c.k = kBase; c.mult = 1; if (fits(c, room)) return c; }
+      return null;
+    }
+    const c = kind === "ship" ? buildShip(kBase, S.level) : kind === "ball" ? buildBall(kBase, S.level) : buildUnderground(kBase, S.level);
     c.k = kBase; c.mult = 1;
     return fits(c, room) ? c : null;
   }
@@ -2990,7 +3035,7 @@
       let c = null;
       if (room > 0.3) {
         const ev = S.events[0];
-        if (ev && tAt >= ev.at * LEVEL_SECONDS) { S.events.shift(); c = special(ev.kind, kBase, room); }
+        if (ev && tAt >= ev.at * LEVEL_SECONDS) { S.events.shift(); c = special(ev.kind, kBase, room); if (!c && S.dbgFails) S.dbgFails.push({ kind: ev.kind, tAt: +tAt.toFixed(1), room: +room.toFixed(1), hb: S.hb, level: S.level }); }
         if (!c) c = pickChunk(kBase, tAt, room);
       }
       if (!c) { placePortal(); added = true; break; }
@@ -3072,10 +3117,11 @@
       else if (o.t === "saw" && o.kind === "track") o.ch = o.rest + (o.far - o.rest) * bob(d, o.d0, o.L);
       else if (o.t === "fb") {
         if (o.state === "wait") {
-          if (d <= (SHAKE_T + Math.sqrt((2 * (o.start - o.land)) / G) + 0.35) * sp) { o.state = "shake"; o.timer = 0; if (!S.sim) audio.rumble(); }
+          if (d <= ((o.shakeT || SHAKE_T) + Math.sqrt((2 * (o.start - o.land)) / G) + (o.lead || 0.35)) * sp) { o.state = "shake"; o.timer = 0; if (!S.sim) audio.rumble(); }
         } else if (o.state === "shake") {
           o.timer += dt;
-          if (o.timer >= SHAKE_T) o.state = "fall";
+          if (o.ug && !S.sim && Math.random() < dt * 20) emit("dust", o.x + o.w / 2 + rand(-10, 10), o.bot - 4, 1, 60);
+          if (o.timer >= (o.shakeT || SHAKE_T)) o.state = "fall";
         } else if (o.state === "fall") {
           o.vy -= G * dt;
           o.bot += o.vy * dt;
@@ -3301,7 +3347,7 @@
       if (h < 0.34) {                                  // darker or lighter patch of rock
         g.fillStyle = dim ? STONE.back2 : h < 0.17 ? STONE.dark : STONE.light;
         g.beginPath(); g.moveTo(cx + 4, cy + 6); g.lineTo(cx + 20 + h * 20, cy + 3); g.lineTo(cx + 26, cy + 18); g.lineTo(cx + 8, cy + 22); g.closePath(); g.fill();
-      } else if (h > (dim ? 0.93 : 0.84)) {             // an ore cluster
+      } else if (h > (dim ? 0.97 : 0.93)) {             // an ore cluster (kept rare)
         const [col, edge] = ORES[Math.floor(rnd() * ORES.length)];
         g.globalAlpha = dim ? 0.45 : 1;
         for (let j = 0; j < 4; j++) {
@@ -3482,6 +3528,16 @@
           const tp = o.bot + o.hh * B;
           if (o.ug) {
             const sx = o.state === "shake" && !reducedMotion ? x + Math.sin(t * 90) * 2.5 : x;
+            if (o.state !== "rest") {
+              // warning: a red drop line and a target on the floor, blinking once it starts to shake
+              const fy = GROUND - o.land, a = o.state === "wait" ? 0.55 : 0.55 + 0.45 * (Math.sin(t * 28) > 0 ? 1 : 0);
+              g.save(); g.globalAlpha = a;
+              g.setLineDash([6, 6]); g.beginPath(); g.moveTo(x + o.w / 2, GROUND - tp + o.hh * B); g.lineTo(x + o.w / 2, fy - 4);
+              g.lineWidth = 2.5; g.strokeStyle = "#ff4d4d"; g.stroke(); g.setLineDash([]);
+              g.beginPath(); g.ellipse(x + o.w / 2, fy - 3, o.w * 0.75, 6, 0, 0, TAU); g.fillStyle = "rgba(255,60,60,0.45)"; g.fill();
+              g.lineWidth = 2; g.strokeStyle = "#ff4d4d"; g.stroke();
+              g.restore();
+            }
             drawStalactite(g, sx, GROUND - tp, o.w, o.hh * B, o.state !== "rest", GROUND - o.uceil);
             break;
           }
