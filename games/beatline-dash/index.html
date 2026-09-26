@@ -285,7 +285,7 @@
 <div class="overlay" id="startScreen">
   <div class="sheet panel">
     <h1 class="title">Beatline Dash</h1>
-    <p class="lede">Climb stairs, leap pits, dodge saws and duck under low ceilings. Survive 60 seconds without crashing and a portal warps you to the next zone, drawn in a completely different style. Every zone runs faster and adds something new. A crash restarts the zone; the bar at the top shows how far you got, and your best is saved. Tap a level below to play it; beat a level to unlock the next.</p>
+    <p class="lede">Six hand-built levels, each drawn in its own style and the same every time you play, so you can learn them. They start gentle and get harder all the way to the end of The Void. A crash restarts the level; the bar at the top shows how far you got, and your best is saved. Tap a level below to play it; beat a level to unlock the next.</p>
     <ul class="zones" id="zoneList" aria-label="Levels: pick one to play"></ul>
     <p class="controls">
       <span><kbd>Space</kbd> <kbd>&uarr;</kbd> <kbd>W</kbd>, click or tap anywhere: jump (hold to keep jumping)</span>
@@ -331,7 +331,7 @@
   "use strict";
 
   // ---- Tuning -------------------------------------------------------------
-  const LEVEL_SECONDS = 60;       // consecutive seconds alive needed to reach the next zone
+  const LEVEL_SECONDS = 60;       // rough level length, used only by the tests (levels are fixed routes now)
   const B = 40;                   // one block, in logical pixels
   const P = 34;                   // player cube size
   const DUCK_H = 17;              // player hitbox height while ducking
@@ -2499,6 +2499,48 @@
   }
 
 
+  // ---- The six levels ----------------------------------------------------
+  // Every level is a fixed route: the same sections in the same order every
+  // attempt, so it can be learned. Edit a route by swapping, adding or removing
+  // names below. Entries are chunk names from CHUNKS, "star: <route>" (see
+  // STAR_CHUNKS), "ship", "ball" or "underground". `k` is the speed at the start
+  // and end of the level (1 = 330 px/s); it ramps evenly across the sections.
+  const ROUTES = [
+    { k: [1.0, 1.1], sections: [          // 1. Meadow Run: learn to jump, climb and use pads and orbs
+      "rolling hills", "hillside", "pit hops", "orb step", "star: sky path", "crate walk",
+      "spring step", "switchbacks", "underground", "crate pyramid", "hilltop", "star: broken bridge",
+      "rabbit hole", "spike garden", "star: secret pit", "summit dive", "block fortress",
+    ] },
+    { k: [1.1, 1.22], sections: [         // 2. Forge: saws, pink orbs and the first ship
+      "saw step", "chain gang", "furnace steps", "star: sky path", "pink skips", "saw pit", "ship",
+      "slag pits", "underground", "catwalk", "star: secret pit", "saw drop", "sky ladder",
+      "piston pillars", "foundry tower", "star: broken bridge", "chimney", "grinder",
+    ] },
+    { k: [1.2, 1.34], sections: [         // 3. Reef: falling and moving blocks, speed portals
+      "rockfall", "slider hop", "reef shelves", "star: broken bridge", "pillar bridge", "sunken bridge",
+      "ship", "gate run", "landslide", "underground", "tide bridge", "star: sky path", "coral terrace",
+      "sunken ruins", "sea cave", "star: secret pit", "crumbling causeway", "gate and rockfall", "tidal stairs",
+    ] },
+    { k: [1.32, 1.5], sections: [         // 4. Canopy: low ceilings, green dash orbs, the ball
+      "under the branches", "dash gap", "ledge crawl", "star: secret pit", "duck and leap", "ship",
+      "canopy climb", "log pile", "underground", "duck and dive", "tunnel stairs", "treehouse",
+      "star: sky path", "ball", "root hollow", "canopy gauntlet", "hollow log", "star: broken bridge",
+      "duck jump rhythm", "mesa",
+    ] },
+    { k: [1.45, 1.66], sections: [        // 5. Glacier: gravity flips, blue orbs and pads
+      "skywalk", "summit flip", "star: sky path", "over the crevasse", "ship", "ice pillars",
+      "flip and land", "underground", "upside bridge", "frost saws", "ice blocks", "star: broken bridge",
+      "double flip", "ice summit", "ball", "inverted stairs", "star: secret pit", "spike floor", "flip frenzy",
+    ] },
+    { k: [1.6, 1.92], sections: [         // 6. The Void: everything, ending in the hardest run in the game
+      "void steps", "bridge and tunnel", "flip saw", "star: broken bridge", "tower gate", "ship",
+      "tunnel drop", "sliders and saws", "void descent", "underground", "ink fortress", "star: sky path",
+      "void pillars", "everything", "flip gauntlet", "ball", "orb tower", "void citadel",
+      "star: secret pit", "canopy gauntlet", "crumbling causeway", "flip frenzy", "final exam",
+    ] },
+  ];
+  const routeK = (level, i) => { const r = ROUTES[level], n = r.sections.length; return r.k[0] + (r.k[1] - r.k[0]) * (n > 1 ? i / (n - 1) : 0); };
+
   // Pace: a speed portal before these chunks slows the run down or speeds it up.
   const PACE_OF = {
     "pit hops": "fast", "rolling hills": "fast", "crate walk": "fast", "hillside": "fast", "saw pit": "fast", "chain gang": "fast",
@@ -2580,7 +2622,7 @@
     c.run(len + w(4.5));
     let cen = T / 2, x = x0 + w(6), i = 0;
     while (x < x1 - w(4)) {
-      cen = clamp(cen + (Math.random() * 2 - 1) * swing, open / 2 + 0.8, T - open / 2 - 0.8);
+      cen = clamp(cen + (genRand() * 2 - 1) * swing, open / 2 + 0.8, T - open / 2 - 0.8);
       const kind = i % 4 === 3 ? "saw" : i % 5 === 2 ? "spikes" : "gate";
       if (kind === "gate") { c.block(x, 1, cen - open / 2); c.o.push({ t: "b", x, w: 1, bot: c.f + cen + open / 2, top: c.f + T }); }
       else if (kind === "saw") c.saw("float", x, cen > T / 2 ? cen - 2.2 : cen + 2.2);
@@ -2617,7 +2659,7 @@
     c.run(w(3.5));
     const xEnd = xs + Math.round((level >= 3 ? 14 : 12) * 8.25 * k);
     const pats = {
-      crystals: () => c.spike(c.x, level >= 2 && Math.random() < 0.5 ? 2 : 1).run(w(4.5)),
+      crystals: () => c.spike(c.x, level >= 2 && genRand() < 0.5 ? 2 : 1).run(w(4.5)),
       lava: () => { const g = w(2.6); c.lava(c.x, g); c.gap(g).run(w(3.5)); },
       stalactite: () => c.fall(c.x, 1).run(1 + w(4.5)),
       crusher: () => c.slide(c.x, "gate", 1, 2).run(1 + w(4)),
@@ -2627,7 +2669,7 @@
     let prev = "";
     while (c.x < xEnd - w(5)) {
       let n;
-      do n = names[Math.floor(Math.random() * names.length)]; while (n === prev);
+      do n = names[Math.floor(genRand() * names.length)]; while (n === prev);
       prev = n;
       pats[n]();
     }
@@ -2650,16 +2692,20 @@
     return c;
   }
   function buildStar(k, which) {
-    const ch = STAR_CHUNKS[which ?? Math.floor(Math.random() * STAR_CHUNKS.length)], c = buildChunk(ch, k);
+    const ch = STAR_CHUNKS[which ?? Math.floor(genRand() * STAR_CHUNKS.length)], c = buildChunk(ch, k);
     c.name = ch.name;
     return c;
   }
 
+  // All level-shaping randomness comes from this seeded generator, reset per
+  // level, so every attempt builds exactly the same level.
+  let genRand = Math.random;
+  const seedGen = level => { genRand = rng(level * 7919 + 101); };
   let nextId = 1;
   // Converts a chunk-space object (blocks, relative heights) into a world object
   // (pixels, absolute heights). x0 is the chunk's world x, hb its floor level.
   function place(s, x0, k, hb) {
-    const o = { t: s.t, id: nextId++, seed: (Math.random() * 1e9) | 0, used: false };
+    const o = { t: s.t, id: nextId++, seed: (hash(x0 * 0.013 + s.x * 7.7 + hb * 3.1) * 1e9) | 0, used: false };
     const X = x0 + s.x * B, H = v => (hb + v) * B;
     switch (s.t) {
       case "f": Object.assign(o, { x: X, w: s.w * B, top: H(s.top), bot: -4000 }); if (s.ug) o.ug = true; break;
@@ -2672,6 +2718,7 @@
       case "sp": Object.assign(o, { x: X, w: B, mult: s.mult, base: H(0), icon: speedName(s.mult) }); break;
       case "gp": Object.assign(o, { x: X, w: B, flip: s.flip, base: H(s.base), ceil: H(s.base) + CEIL_H }); break;
       case "roof": Object.assign(o, { x: X, w: s.w * B, ceil: H(s.ceil) }); break;
+      case "sk": Object.assign(o, { x: X, w: 1, k: s.k }); break;
       case "ug": Object.assign(o, { x: X, w: s.w * B, ceil: H(s.ceil), surface: H(s.surface), tip: tipsSeen.underground ? null : "underground" }); break;
       case "lava": Object.assign(o, { x: X, w: s.w * B, top: H(s.top) }); break;
       case "lc": Object.assign(o, { x: X, w: s.w * B, bottom: H(s.bottom) + (s.clear ? s.clear * B : LOW_CEIL), cave: !!s.clear }); break;
@@ -2712,25 +2759,26 @@
   let bestLevel = store.get("beatline-best-level", 1);
   let soundOn = store.get("beatline-sound", true);
   const tipsSeen = store.get("beatline-tips", {});
-  const starSave = store.get("beatline-stars", {});      // { levelIndex: [bool, bool, bool] }
+  const starSave = store.get("beatline-stars-v2", {});      // { levelIndex: [bool, bool, bool] }
   const levelStars = l => starSave[l] || [false, false, false];
   function commitStars(l) {
     const got = levelStars(l).slice();
     for (const i of S.runStars) if (i >= 0 && i < 3) got[i] = true;
     starSave[l] = got;
-    store.set("beatline-stars", starSave);
+    store.set("beatline-stars-v2", starSave);
   }
-  const bestPct = store.get("beatline-best-pct", {});   // { levelIndex: best percent reached }
+  const bestPct = store.get("beatline-best-pct-v2", {});   // { levelIndex: best percent reached }
   let practice = false;                                 // practice mode: checkpoints, nothing saved
   const cps = [];                                       // practice checkpoints, newest last
   function recordBest(pct) {
     if (practice || S.sim || pct <= (bestPct[S.level] || 0)) return false;
     bestPct[S.level] = pct;
-    store.set("beatline-best-pct", bestPct);
+    store.set("beatline-best-pct-v2", bestPct);
     return true;
   }
   // Percent of the level done: the level clock, capped at 99 until you enter the portal.
-  const progressPct = () => (S.mode === "play" ? Math.min(99, Math.floor((S.levelTime / LEVEL_SECONDS) * 100)) : 0);
+  const progressFrac = () => (S.mode === "play" && S.portalX ? clamp((S.player.x - S.levelStartX) / (S.portalX - S.levelStartX), 0, 1) : 0);
+  const progressPct = () => Math.min(99, Math.floor(progressFrac() * 100));
   const starsHTML = arr => arr.map(v => `<span class="${v ? "on" : "off"}">${v ? "&#9733;" : "&#9734;"}</span>`).join("");
 
   // ---- State --------------------------------------------------------------
@@ -2739,6 +2787,7 @@
     level: 0, levelTime: 0, attempts: 0,
     player: { x: 0, h: 0, vy: 0, rot: 0, grounded: true },
     objs: [], nextX: 0, hb: 0, portalX: null, portalH: 0, runway: null, introPending: false,
+    pending: [], pendI: 0, curK: 1, levelStartX: 0,
     dead: false, deadT: 0,
     held: false, buffer: 0, duckInput: false, ducking: false, flipped: false, ceilH: CEIL_H, surf: 0,
     envFrom: 0, envTo: 0, envT: 1, titleT: 0,
@@ -2757,7 +2806,7 @@
   const PULSE_COL = { meadow: "#fff3b0", forge: "#ff9a3d", reef: "#ffffff", canopy: "#ffe9a8", glacier: "#6fb6ff", void: "#d42a3c" };
   function bigMoment(col, strength = 1) { if (!S.sim) { pop = Math.max(pop, strength); popCol = col; } }
 
-  const baseSpeed = () => Math.min(640, 330 + S.level * 26 + (S.levelTime / LEVEL_SECONDS) * 50);
+  const baseSpeed = () => 330 * S.curK;
   function speed() { return S.fixedSpeed || baseSpeed() * S.speedMult; }
   const camLeft = () => S.player.x - playerSX;
   const playerH = () => (S.pmode === "ship" ? SHIP_H : S.pmode === "ball" ? BALL_D : S.ducking ? DUCK_H : P);
@@ -2774,11 +2823,11 @@
   // ---- Level flow ---------------------------------------------------------
   function restartLevel() {
     S.player = { x: 0, h: 0, vy: 0, rot: 0, grounded: true };
-    S.nextX = 16 * B;
     S.objs = [place({ t: "f", x: 0, w: 36, top: 0 }, -20 * B, 1, 0)];
     S.hb = 0;
-    S.portalX = null;
     S.runway = null;
+    loadLevel(S.level, 16 * B, 0);
+    S.levelStartX = 0;
     S.levelTime = 0;
     S.dead = false;
     S.deadT = 0;
@@ -2790,15 +2839,13 @@
     S.runStars = new Set();
     S.airTop = 0; S.airFrom = 0;
     cps.length = 0;
-    planEvents();
-    S.introPending = true;
     S.attempts++;
   }
   function startGame(level = 0) {
     if (S.mode === "play") return;
     S.mode = "play";
     S.paused = false;
-    S.level = level;
+    S.level = clamp(level | 0, 0, ROUTES.length - 1);
     S.attempts = 0;
     restartLevel();
     setEnv(level % STYLES.length);
@@ -2831,23 +2878,36 @@
     if (!practice) { commitStars(done); recordBest(100); }
     el("bannerStars").innerHTML = practice ? `Level ${done + 1} complete (practice: nothing saved)` : `Level ${done + 1} complete ${starsHTML(got)}`;
     cps.length = 0;
+    if (done + 1 >= ROUTES.length) { finishGame(); return; }
     S.level++;
     S.runStars = new Set();
     S.speedMult = 1; S.planMult = 1; S.pmode = "cube";
-    planEvents();
     S.levelTime = 0;
-    S.portalX = null;
-    S.introPending = true;
-    // keep running on the portal's runway until the next zone's first chunk
-    const need = snapBeat(camLeft() + viewW + 3 * B);
-    if (S.runway) { S.runway.w = Math.max(S.runway.w, need - S.runway.x); S.nextX = S.runway.x + S.runway.w; S.runway = null; }
-    else S.nextX = need;
+    // keep running on the portal's runway until the next level's first section
+    const need = snapBeat(camLeft() + viewW * 1.3 + 3 * B);
+    if (S.runway) S.runway.w = Math.max(S.runway.w, need - S.runway.x);
+    loadLevel(S.level, need, S.hb);
+    S.levelStartX = S.player.x;
     setEnv(S.level % STYLES.length);
     S.flash = 0.8;
     if (!practice && S.level + 1 > bestLevel) { bestLevel = S.level + 1; store.set("beatline-best-level", bestLevel); }
     emit("spark", S.player.x + P / 2, S.player.h + P / 2, 40, 500);
     audio.levelUp();
     showBanner();
+  }
+  // Beating the Void: the end of the game
+  function finishGame() {
+    S.portalX = null;
+    if (S.runway) S.runway.w += 400 * B;
+    S.flash = 0.9;
+    emit("spark", S.player.x + P / 2, S.player.h + P / 2, 60, 600);
+    audio.levelUp();
+    el("bannerBig").textContent = "YOU WIN!";
+    el("bannerSub").textContent = practice ? "All six levels (practice)" : "All six levels complete";
+    el("bannerTip").textContent = "Go back for every star.";
+    const b = el("banner"); b.hidden = false; b.classList.remove("show"); void b.offsetWidth; b.classList.add("show");
+    clearTimeout(bannerTimer);
+    bannerTimer = setTimeout(() => { b.hidden = true; b.classList.remove("show"); if (S.mode === "play") quitToTitle(); }, 3200);
   }
   function die() {
     if (S.dead) return;
@@ -2923,7 +2983,7 @@
   // ---- Practice checkpoints -----------------------------------------------
   // A checkpoint is a copy of the whole run: player, world objects and the
   // level-generation cursor, so respawning puts everything back exactly.
-  const CP_FIELDS = ["nextX", "hb", "portalX", "portalH", "levelTime", "flipped", "ceilH", "surf", "pmode", "secBase", "speedMult", "planMult", "dashT", "starNext", "introPending", "ducking", "airTop", "airFrom"];
+  const CP_FIELDS = ["nextX", "hb", "portalX", "portalH", "levelTime", "flipped", "ceilH", "surf", "pmode", "secBase", "speedMult", "planMult", "dashT", "ducking", "airTop", "airFrom", "pendI", "curK", "levelStartX"];
   function placeCheckpoint() {
     if (!practice || S.mode !== "play" || S.paused || S.dead) return;
     const st = {};
@@ -2960,122 +3020,88 @@
   // ---- Spawning -----------------------------------------------------------
   const MAX_HB = 8;                        // highest floor level, in blocks
   const snapBeat = x => Math.ceil(x / (2 * B) - 1e-9) * 2 * B;   // chunks start on an 8th note (2 blocks)
-  // Chance of each tier by time into the level: easy in the first quarter, hardest in the last.
-  function tierWeights(t) {
-    const q = t / LEVEL_SECONDS;
-    if (S.level < 2) return q < 0.2 ? [1, 0.35, 0] : q < 0.45 ? [0.5, 1, 0.25] : q < 0.7 ? [0.2, 1, 0.6] : [0, 0.4, 1];
-    return q < 0.25 ? [1, 0.15, 0] : q < 0.5 ? [0.6, 1, 0.1] : q < 0.75 ? [0.25, 1, 0.45] : [0, 0.3, 1];
-  }
-  // Special sections per level: three star routes, an underground stone cavern,
-  // a ship tunnel from level 2 and a ball corridor from level 4, at fixed points
-  // of the level's clock.
-  function planEvents() {
-    // spaced so that no section runs into the next one: star, ship, star, underground, star, ball
-    const ev = [{ at: 0.08, kind: "star" }, { at: 0.3, kind: "star" }, { at: 0.72, kind: "star" }, { at: 0.36, kind: "underground" }];
-    if (S.level >= 1) ev.push({ at: 0.13, kind: "ship" });
-    if (S.level >= 3) ev.push({ at: 0.8, kind: "ball" });
-    S.events = ev.sort((a, b) => a.at - b.at);
-    S.starNext = 0;
-  }
-  function paceMult(pace, kBase) {
-    if (S.level < 2) return 1;                     // speed portals arrive in level 3
-    const m = pace === "slow" ? 0.8 : pace === "fast" ? (S.level >= 2 && Math.random() < 0.4 ? 1.5 : 1.25) : 1;
+  function paceMult(pace, kBase, level) {
+    if (level < 2) return 1;                       // speed portals arrive in level 3
+    const m = pace === "slow" ? 0.8 : pace === "fast" ? (level >= 4 ? 1.4 : 1.25) : 1;
     return clamp(m, 0.8 / kBase, 1.94 / kBase);   // stay inside the speeds every chunk is checked at
   }
-  function fits(c, room) { return (c.allowLow || S.hb + c.lo >= 0) && (c.allowHigh || S.hb + c.hi <= MAX_HB) && c.x / (8.25 * c.k) <= room; }
-  function special(kind, kBase, room) {
-    if (kind === "star") {
-      // try every star route (in random order) before giving up on this star
-      const order = STAR_CHUNKS.map((_, i) => i).sort(() => Math.random() - 0.5);
-      for (const i of order) { const c = buildStar(kBase, i); c.k = kBase; c.mult = 1; if (fits(c, room)) return c; }
-      return null;
-    }
-    const c = kind === "ship" ? buildShip(kBase, S.level) : kind === "ball" ? buildBall(kBase, S.level) : buildUnderground(kBase, S.level);
-    c.k = kBase; c.mult = 1;
-    return fits(c, room) ? c : null;
-  }
-  function pickChunk(kBase, tAt, room) {
-    const lvl = S.level % STYLES.length, loop = S.level >= STYLES.length;
-    const tw = tierWeights(tAt);
-    let pool = CHUNKS.filter(ch => ch.tier > 0 && (loop || ch.lvl <= lvl));
-    if (S.introPending) {
-      S.introPending = false;
-      if (!loop && lvl > 0) pool = pool.filter(ch => ch.lvl === lvl && ch.tier === 1);
-    }
-    // weighted random order; the current zone's own chunks come up most often
-    const order = pool
-      .map(ch => ({ ch, key: -Math.log(Math.random() + 1e-12) / Math.max(1e-6, tw[ch.tier - 1] * (loop || ch.lvl === lvl ? 6 : 1)) }))
-      .filter(e => tw[e.ch.tier - 1] > 0)
-      .sort((a, b) => a.key - b.key)
-      .map(e => e.ch)
-      .concat(CHUNKS.filter(ch => ch.tier === 0));
-    for (const ch of order) {
-      const mult = paceMult(ch.pace, kBase), c = buildChunk(ch, kBase * mult);
-      c.k = kBase * mult; c.mult = mult;
-      if (!fits(c, room)) continue;
-      c.name = ch.name;
+  // Builds one route entry at speed factor kBase.
+  function buildSection(entry, level, kBase) {
+    const name = typeof entry === "string" ? entry : entry.name;
+    let c;
+    if (name === "ship") c = buildShip(kBase, level);
+    else if (name === "ball") c = buildBall(kBase, level);
+    else if (name === "underground") c = buildUnderground(kBase, level);
+    else if (name.startsWith("star:")) {
+      const i = STAR_CHUNKS.findIndex(ch => ch.name === name);
+      if (i < 0) throw new Error(`Unknown star route "${name}"`);
+      c = buildStar(kBase, i);
+    } else {
+      const ch = CHUNKS.find(ch => ch.name === name);
+      if (!ch) throw new Error(`Unknown section "${name}"`);
+      const mult = paceMult(ch.pace, kBase, level);
+      c = buildChunk(ch, kBase * mult); c.name = name; c.k = kBase * mult; c.mult = mult;
       return c;
     }
-    return null;
+    c.k = kBase; c.mult = 1;
+    return c;
   }
-  function placePortal() {
-    S.portalX = S.nextX + 2 * B;
-    S.portalH = S.hb * B;
-    S.runway = place({ t: "f", x: 0, w: 30, top: 0 }, S.nextX, 1, S.hb);
-    S.objs.push(S.runway);
-    S.nextX = null;
+  // Lays out a whole level (same every time) starting at world x0 on floor level hb0.
+  // Objects wait in S.pending and are brought into play as the camera nears them.
+  function loadLevel(level, x0, hb0) {
+    level = clamp(level, 0, ROUTES.length - 1);
+    seedGen(level);
+    const route = ROUTES[level], list = [];
+    let x = x0, hb = hb0, planMult = 1, starNext = 0;
+    const put = (s, k) => { const o = place(s, x, k, hb); list.push(o); return o; };
+    route.sections.forEach((entry, i) => {
+      const kBase = routeK(level, i), c = buildSection(entry, level, kBase), k = c.k;
+      put({ t: "sk", x: -1, k: kBase }, k);                         // the speed for this section
+      if (Math.abs(c.mult - planMult) > 0.01) { put({ t: "sp", x: -1, mult: c.mult }, k); planMult = c.mult; }
+      for (const s of [...c.floors, ...c.o]) {
+        const o = put(s, k);
+        o.chunk = c.name;
+        if (o.t === "star") o.idx = starNext++;
+        if (o.t === "lc" && !o.cave && !tipsSeen.duck) o.tip = "duck";
+        if (o.t === "gp" && o.flip && !tipsSeen.flip) o.tip = "flip";
+        if (o.t === "mp" && o.mode !== "cube" && !tipsSeen[o.mode]) o.tip = o.mode;
+      }
+      hb += c.f;
+      x += c.x * B;
+      // breather: a short flat stretch, sometimes with a one-block step, then snap to the beat
+      const bw = (1.5 + genRand() * 1.5) * k;
+      put({ t: "f", x: 0, w: bw, top: 0 }, k); x += bw * B;
+      const r = genRand();
+      let dh = 0;
+      if (r < 0.2 && hb < 3) dh = 1;
+      else if (r < 0.4 && hb > 0) dh = -1;
+      else if (r < 0.55) {
+        const hw = Math.round(3.5 * k);
+        put({ t: "f", x: 0, w: hw, top: 1 }, k); x += hw * B;
+        put({ t: "f", x: 0, w: 3 * k, top: 0 }, k); x += 3 * k * B;
+      } else if (r < 0.7) {
+        x += Math.round(2.4 * k) * B;
+        put({ t: "f", x: 0, w: 3 * k, top: 0 }, k); x += 3 * k * B;
+      }
+      hb += dh;
+      const end = snapBeat(x + (dh ? 3 * k * B : 0));
+      if (end > x) put({ t: "f", x: 0, w: (end - x) / B, top: 0 }, k);
+      x = end;
+    });
+    const runway = put({ t: "f", x: 0, w: 30, top: 0 }, 1);
+    runway.isRunway = true;
+    list.sort((a, b) => a.x - b.x);
+    S.pending = list; S.pendI = 0;
+    S.portalX = x + 2 * B; S.portalH = hb * B; S.hb = hb;
+    S.curK = routeK(level, 0); S.nextX = null;
   }
   function spawn() {
     const right = camLeft() + viewW * 1.2 + 3 * B;
     let added = false;
-    while (S.nextX !== null && S.nextX < right) {
-      const sp = speed(), kBase = baseSpeed() / 330;
-      const tAt = S.levelTime + (S.nextX - S.player.x) / sp;
-      const room = LEVEL_SECONDS - 0.25 - tAt;
-      let c = null;
-      if (room > 0.3) {
-        const ev = S.events[0];
-        if (ev && tAt >= ev.at * LEVEL_SECONDS) { S.events.shift(); c = special(ev.kind, kBase, room); if (!c && S.dbgFails) S.dbgFails.push({ kind: ev.kind, tAt: +tAt.toFixed(1), room: +room.toFixed(1), hb: S.hb, level: S.level }); }
-        if (!c) c = pickChunk(kBase, tAt, room);
-      }
-      if (!c) { placePortal(); added = true; break; }
-      const k = c.k;
-      if (Math.abs(c.mult - S.planMult) > 0.01) {       // speed portal just before the chunk
-        S.objs.push(place({ t: "sp", x: -1, mult: c.mult }, S.nextX, k, S.hb));
-        S.planMult = c.mult;
-      }
-      for (const s of [...c.floors, ...c.o]) {
-        const o = place(s, S.nextX, k, S.hb);
-        o.chunk = c.name;
-        if (o.t === "star") o.idx = S.starNext++;
-        if (o.t === "lc" && !o.cave && !tipsSeen.duck) o.tip = "duck";
-        if (o.t === "gp" && o.flip && !tipsSeen.flip) o.tip = "flip";
-        if (o.t === "mp" && o.mode !== "cube" && !tipsSeen[o.mode]) o.tip = o.mode;
-        S.objs.push(o);
-      }
-      if (S.chunkLog) S.chunkLog.push({ name: c.name, t: +tAt.toFixed(1) });
-      S.hb += c.f;
-      S.nextX += c.x * B;
-      // breather: a short flat stretch, sometimes with a one-block step, then snap to the beat
-      const bw = (1.5 + Math.random() * 1.5) * k;
-      S.objs.push(place({ t: "f", x: 0, w: bw, top: 0 }, S.nextX, k, S.hb));
-      S.nextX += bw * B;
-      const r = Math.random();
-      let dh = 0;
-      if (r < 0.2 && S.hb < 3) dh = 1;
-      else if (r < 0.4 && S.hb > 0) dh = -1;
-      else if (r < 0.55) {
-        const hw = Math.round(3.5 * k);
-        S.objs.push(place({ t: "f", x: 0, w: hw, top: 1 }, S.nextX, k, S.hb)); S.nextX += hw * B;
-        S.objs.push(place({ t: "f", x: 0, w: 3 * k, top: 0 }, S.nextX, k, S.hb)); S.nextX += 3 * k * B;
-      } else if (r < 0.7) {
-        S.nextX += Math.round(2.4 * k) * B;
-        S.objs.push(place({ t: "f", x: 0, w: 3 * k, top: 0 }, S.nextX, k, S.hb)); S.nextX += 3 * k * B;
-      }
-      S.hb += dh;
-      const end = snapBeat(S.nextX + (dh ? 3 * k * B : 0));
-      if (end > S.nextX) S.objs.push(place({ t: "f", x: 0, w: (end - S.nextX) / B, top: 0 }, S.nextX, k, S.hb));
-      S.nextX = end;
+    while (S.pendI < S.pending.length && S.pending[S.pendI].x < right) {
+      const o = { ...S.pending[S.pendI++] };
+      if (o.isRunway) S.runway = o;
+      S.objs.push(o);
       added = true;
     }
     if (added) S.objs.sort((a, b) => a.x - b.x);
@@ -3103,6 +3129,7 @@
     for (const o of S.objs) {
       const d = o.x - p.x;
       if (d > 30 * B) break;
+      if (o.t === "sk" && !o.used && p.x + P / 2 >= o.x + B / 2) { o.used = true; S.curK = o.k; continue; }
       if ((o.t === "mp" || o.t === "sp") && !o.used && p.x + P / 2 >= o.x + B / 2) {
         o.used = true;
         if (o.t === "sp") S.speedMult = o.mult;
@@ -3655,7 +3682,7 @@
     const lvl = playing ? S.level : S.envTo;
     setText("lvl", hudEls.lvl, String(lvl + 1));
     setText("env", hudEls.env, playing ? zoneName(lvl) : STYLES[lvl].name);
-    const pct = playing ? Math.min(100, (S.levelTime / LEVEL_SECONDS) * 100) : 0;
+    const pct = playing ? progressFrac() * 100 : 0;
     const pctStr = pct.toFixed(1) + "%";
     if (hudCache.pct !== pctStr) { hudCache.pct = pctStr; hudEls.fill.style.width = pctStr; hudEls.bar.setAttribute("aria-valuenow", Math.round(pct)); }
     const best = bestPct[lvl] || 0;
@@ -3704,7 +3731,7 @@
     el("starTotal").innerHTML = `Stars: <b>${total}</b> / ${3 * bestLevel}`;
   }
   function renderLevelGrid() {
-    const n = Math.max(6, bestLevel);
+    const n = ROUTES.length;
     el("levelGrid").innerHTML = Array.from({ length: n }, (_, i) => {
       const open = i < bestLevel;
       return `<li><button class="panel" type="button" data-level="${i}"${open ? "" : " disabled"}><b>${zoneIcon(styleOf(i).id)}Level ${i + 1}</b><span>${zoneName(i)}</span><span>${open ? starsHTML(levelStars(i)) : "Locked"}</span>${open ? `<span>Best ${bestPct[i] || 0}%</span>` : ""}</button></li>`;
@@ -4016,7 +4043,7 @@
         ...[...c.floors, ...c.o].map(o => Object.assign(place(o, x0, k, hb), { chunk: c.name })),
         place({ t: "f", x: 0, w: 16, top: c.f }, x0 + c.x * B, k, hb),
       ].sort((a, b) => a.x - b.x);
-      S.hb = hb; S.surf = hb * B; S.nextX = null;
+      S.hb = hb; S.surf = hb * B; S.nextX = null; S.portalX = null; S.pending = []; S.pendI = 0;
       endX = x0 + (c.x + 12) * B;
     }
     const seen = new Set(), spawned = [];
@@ -4120,7 +4147,7 @@
     }
     requestAnimationFrame(frame);
   }
-  window.__beatline = { S, dbg: () => ({ wTop, wBot, vL, vR, camH, zoom }), buildUnderground, setZoom: z => { zoom = z; }, particleCount: () => particles.length, render, CHUNKS, STAR_CHUNKS, buildShip, buildBall, buildStar, STYLES, solve, buildChunk, place, setEnv, startGame, spawn, speed, emit, updateCamera, updateDynamics, LEVEL_SECONDS, B, CEIL_H };
+  window.__beatline = { S, ROUTES, loadLevel, dbg: () => ({ wTop, wBot, vL, vR, camH, zoom }), buildUnderground, setZoom: z => { zoom = z; }, particleCount: () => particles.length, render, CHUNKS, STAR_CHUNKS, buildShip, buildBall, buildStar, STYLES, solve, buildChunk, place, setEnv, startGame, spawn, speed, emit, updateCamera, updateDynamics, LEVEL_SECONDS, B, CEIL_H };
   try { window.claude?.hot?.snapshot?.(() => ({ mode: S.mode, level: S.level, attempts: S.attempts })); } catch { /* no hot reload */ }
   const hot = window.claude?.hot;
   if (hot?.ready) hot.ready(boot); else boot(hot?.data ?? {});
