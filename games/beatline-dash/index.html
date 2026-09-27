@@ -611,7 +611,7 @@
         g.beginPath();
         for (let cx = x + B; cx < x + w - 1; cx += B) { g.moveTo(cx, y); g.lineTo(cx, y + h); }
         for (let cy = y + B; cy < y + h - 1; cy += B) { g.moveTo(x, cy); g.lineTo(x + w, cy); }
-        out(g, 2);
+        g.lineWidth = 1.5; g.strokeStyle = C.crateDk; g.stroke();          // soft joins inside, so a stack reads as one
         g.beginPath(); g.rect(x, y, w, h); out(g, 3.5);
       },
       saw(g, cx, cy, r, ang) {
@@ -791,12 +791,15 @@
       block(g, x, y, w, h) {
         g.fillStyle = C.iron; g.fillRect(x, y, w, h);
         g.fillStyle = C.ironLt; g.fillRect(x + 3, y + 3, w - 6, 4);
+        // big plates (two blocks wide) with soft seams, rivets only at plate corners
+        const PL = 2 * B;
         g.beginPath();
-        for (let cx = x + B; cx < x + w - 1; cx += B) { g.moveTo(cx, y); g.lineTo(cx, y + h); }
-        for (let cy = y + B; cy < y + h - 1; cy += B) { g.moveTo(x, cy); g.lineTo(x + w, cy); }
-        g.lineWidth = 2; g.strokeStyle = C.ironDk; g.stroke();
-        for (let cx = x; cx < x + w - 1; cx += B) for (let cy = y; cy < y + h - 1; cy += B) {
-          rivet(g, cx + 7, cy + 7); rivet(g, cx + B - 7, cy + 7); rivet(g, cx + 7, cy + B - 7); rivet(g, cx + B - 7, cy + B - 7);
+        for (let cx = x + PL; cx < x + w - 1; cx += PL) { g.moveTo(cx, y); g.lineTo(cx, y + h); }
+        for (let cy = y + PL; cy < y + h - 1; cy += PL) { g.moveTo(x, cy); g.lineTo(x + w, cy); }
+        g.lineWidth = 1.5; g.strokeStyle = C.ironDk; g.stroke();
+        for (let cx = x; cx < x + w - 1; cx += PL) for (let cy = y; cy < y + h - 1; cy += PL) {
+          const pw = Math.min(PL, x + w - cx), ph = Math.min(PL, y + h - cy);
+          rivet(g, cx + 7, cy + 7); rivet(g, cx + pw - 7, cy + 7); rivet(g, cx + 7, cy + ph - 7); rivet(g, cx + pw - 7, cy + ph - 7);
         }
         g.beginPath(); g.rect(x, y, w, h); out(g, 3);
       },
@@ -1250,7 +1253,7 @@
       }
     }
     return {
-      id: "glacier", name: "Glacier", isNew: "Gravity flip portals, blue orbs and blue pads", note: 47, bass: "sine", lead: "sine", cutoff: 1000,
+      id: "glacier", noSeamBlend: true, name: "Glacier", isNew: "Gravity flip portals, blue orbs and blue pads", note: 47, bass: "sine", lead: "sine", cutoff: 1000,
       bg(g, t) {
         const top = -offY;
         const grad = g.createLinearGradient(0, top, 0, GROUND); grad.addColorStop(0, C.sky0); grad.addColorStop(1, C.sky1);
@@ -1288,11 +1291,10 @@
         poly(g, [mx, tip, mx - 6, by - dir * 13, mx, by - dir * 9], C.ice2);
       },
       block(g, x, y, w, h) {
-        for (let cx = x; cx < x + w - 1; cx += B) for (let cy = y; cy < y + h - 1; cy += B) {
-          const mx = cx + B / 2, my = cy + B / 2;
-          poly(g, [cx, cy, cx + B, cy, mx, my], C.ice0); poly(g, [cx + B, cy, cx + B, cy + B, mx, my], C.ice2);
-          poly(g, [cx, cy + B, cx + B, cy + B, mx, my], C.ice3); poly(g, [cx, cy, cx, cy + B, mx, my], C.ice1);
-        }
+        // one faceted slab per block (not per 40px cell), so big ice reads as one piece
+        const cw = w, ch = h, mx = x + cw / 2, my = y + ch / 2;
+        poly(g, [x, y, x + cw, y, mx, my], C.ice0); poly(g, [x + cw, y, x + cw, y + ch, mx, my], C.ice2);
+        poly(g, [x, y + ch, x + cw, y + ch, mx, my], C.ice3); poly(g, [x, y, x, y + ch, mx, my], C.ice1);
         g.strokeStyle = "#ffffff"; g.lineWidth = 1; g.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
       },
       saw(g, cx, cy, r, ang) {
@@ -1744,7 +1746,7 @@
 
     // ---- Zone 3: Reef - falling and sliding blocks ----
     { lvl: 2, tier: 1, name: "rockfall", build(c, k, w) {
-      c.run(3).fall(c.x, 2).run(2 + w(6));
+      c.run(6).fall(c.x, 2).run(2 + w(6));
       c.spike(c.x).run(w(5));
       c.fall(c.x, 1).run(1 + w(5));
       c.gap(w(2.6)).run(w(3));
@@ -2048,7 +2050,7 @@
       c.run(2).gap(w(2)).up().run(w(2.5));
       c.gap(w(2)).slide(c.x, "low", w(2), 1, -1, 6).gap(w(2)).gap(w(2));
       c.run(w(2.5)).gap(w(2.2)).down().run(w(4));
-      c.spike(c.x).run(w(3.5));
+      c.spike(c.x).run(w(5.5));
       c.fall(c.x, 2).run(2 + w(3.5));
     } },
     { lvl: 2, tier: 2, name: "trench", build(c, k, w) {
@@ -2110,6 +2112,33 @@
       c.block(c.x, 2, 1).run(2 + w(6));
       c.up().run(w(6)).down().run(w(5));
       c.spike(c.x).run(w(5));
+    } },
+
+    { lvl: 1, tier: 1, name: "forge warmup", build(c, k, w) {
+      c.run(5).spike(c.x).run(w(7));
+      c.saw("ground", c.x).run(w(7));
+      c.up().run(w(6)).down().run(w(5));
+    } },
+    { lvl: 2, tier: 1, name: "reef warmup", build(c, k, w) {
+      c.run(5).spike(c.x).run(w(7));
+      c.fall(c.x, 2).run(2 + w(7));
+      c.gap(w(2.6)).run(w(5));
+    } },
+    { lvl: 3, tier: 1, name: "canopy warmup", build(c, k, w) {
+      c.run(5).spike(c.x).run(w(7));
+      c.low(c.x, 3).run(3 + w(6));
+      c.block(c.x, 2, 1).run(2 + w(5));
+    } },
+    { lvl: 4, tier: 1, name: "glacier warmup", build(c, k, w) {
+      c.run(5).spike(c.x).run(w(6));
+      const x0 = c.x, x1 = x0 + w(13);
+      c.flip(x0, x1).cspike(x0 + w(6.5));
+      c.run(x1 - x0 + w(5));
+    } },
+    { lvl: 5, tier: 1, name: "void warmup", build(c, k, w) {
+      c.run(5).saw("ground", c.x).run(w(6));
+      c.low(c.x, 2).run(2 + w(5));
+      c.spike(c.x, 2).run(w(5));
     } },
 
     // ---- Extra terrain for the first two zones ----
@@ -2542,28 +2571,28 @@
       "rabbit hole", "spike garden", "star: secret pit", "summit dive", "block fortress",
     ] },
     { k: [1.1, 1.22], sections: [         // 2. Forge: saws, pink orbs and the first ship
-      "saw step", "chain gang", "furnace steps", "star: pink ladder", "pink skips", "saw pit",
+      "forge warmup", "saw step", "chain gang", "furnace steps", "star: pink ladder", "pink skips", "saw pit",
       "star: ship pocket", "slag pits", "foundry", "catwalk", "star: slag dive", "saw drop", "sky ladder",
       "track ledge", "piston pillars", "foundry tower", "saw platforms", "chimney", "grinder",
     ] },
     { k: [1.2, 1.34], sections: [         // 3. Reef: falling and moving blocks, speed portals
-      "rockfall", "slider hop", "reef shelves", "star: riptide", "pillar bridge", "sunken bridge",
+      "reef warmup", "rockfall", "slider hop", "reef shelves", "star: riptide", "pillar bridge", "sunken bridge",
       "ship", "gate run", "landslide", "shipwreck", "tide bridge", "star: sunken arch", "coral terrace",
       "sunken ruins", "trench", "sea cave", "star: spike hop", "crumbling causeway", "gate and rockfall", "tidal stairs",
     ] },
     { k: [1.32, 1.5], sections: [         // 4. Canopy: low ceilings, green dash orbs, the ball
-      "under the branches", "dash gap", "ledge crawl", "star: root crawl", "duck and leap", "ship",
+      "canopy warmup", "under the branches", "dash gap", "ledge crawl", "star: root crawl", "duck and leap", "ship",
       "canopy climb", "log pile", "treetops", "duck and dive", "tunnel stairs", "treehouse",
       "star: vine dash", "star: ball notch", "root hollow", "canopy gauntlet", "hollow log",
       "duck jump rhythm", "mesa",
     ] },
     { k: [1.45, 1.66], sections: [        // 5. Glacier: gravity flips, blue orbs and pads
-      "skywalk", "summit flip", "star: ice shaft", "over the crevasse", "ship", "ice pillars",
+      "glacier warmup", "skywalk", "summit flip", "star: ice shaft", "over the crevasse", "ship", "ice pillars",
       "flip and land", "icecave", "upside bridge", "frost saws", "ice blocks", "star: mirror slabs",
       "double flip", "ice summit", "ball", "inverted stairs", "star: flip pocket", "spike floor", "flip frenzy",
     ] },
     { k: [1.6, 1.92], sections: [         // 6. The Void: everything, ending in the hardest run in the game
-      "void steps", "bridge and tunnel", "flip saw", "star: void ladder", "tower gate", "ship",
+      "void warmup", "void steps", "bridge and tunnel", "flip saw", "star: void ladder", "tower gate", "ship",
       "tunnel drop", "sliders and saws", "void descent", "inkwell", "ink fortress", "star: dash dive",
       "void pillars", "everything", "flip gauntlet", "ball", "orb tower", "void citadel",
       "star: ceiling gauntlet", "canopy gauntlet", "crumbling causeway", "flip frenzy", "final exam",
@@ -2815,8 +2844,9 @@
   // Ship tunnel: floor, ceiling and pillar gates to weave through. Tighter in later levels.
   function buildShip(k, level, opts = {}) {
     const c = builder(k), w = n => Math.max(1, Math.round(n * k));
-    const T = 7, open = level >= 5 ? 2.9 : level >= 3 ? 3.3 : 3.9, secs = level >= 4 ? 11 : 9, gap = level >= 5 ? 5.5 : level >= 3 ? 6.2 : 7;
-    const swing = level >= 5 ? 1.3 : level >= 3 ? 1.1 : 0.9;   // how far the gap moves from one gate to the next
+    const T = 7, open = level >= 5 ? 2.5 : level >= 4 ? 2.7 : level >= 2 ? 3.0 : 3.4, secs = level >= 4 ? 11 : 9;
+    const gap = level >= 4 ? 4.4 : level >= 2 ? 5 : 5.5;
+    const swing = level >= 4 ? 1.5 : level >= 2 ? 1.3 : 1.1;  // how far the gap moves from one gate to the next
     c.run(3);
     const x0 = c.x, len = Math.round(secs * 8.25 * k), x1 = x0 + len;
     c.mode(x0, "ship", T).mode(x1, "cube", T).roofAt(x0 - 1, len + 3, T);
@@ -2825,7 +2855,7 @@
     let cen = T / 2, x = x0 + w(6), i = 0;
     while (x < x1 - w(4)) {
       cen = clamp(cen + (genRand() * 2 - 1) * swing, open / 2 + 0.8, T - open / 2 - 0.8);
-      const kind = i % 4 === 3 ? "saw" : i % 5 === 2 ? "spikes" : "gate";
+      const kind = i % 3 === 2 ? "saw" : i % 5 === 3 ? "spikes" : "gate";
       if (kind === "gate") { c.block(x, 1, cen - open / 2); c.o.push({ t: "b", x, w: 1, bot: c.f + cen + open / 2, top: c.f + T }); }
       else if (kind === "saw") {
         const sd = cen > T / 2 ? cen - 2.2 : cen + 2.2;
@@ -2834,6 +2864,9 @@
         if (opts.star && !c.starred && i >= 3) { c.star(x - 0.5, cen + (sd - cen) * 0.5 - 0.5); c.starred = true; }
       }
       else { c.spike(x, 2); c.cspike(x, 2); }
+      // between gates, a spike on the floor or ceiling keeps you from hugging the edges
+      const mid = Math.round(x + w(gap) / 2);
+      if (mid < x1 - w(5)) { if (i % 2) c.spike(mid, 1); else c.cspike(mid, 1); }
       x += w(gap); i++;
     }
     c.name = "ship tunnel";
@@ -2965,7 +2998,7 @@
       case "ug": Object.assign(o, { x: X, w: s.w * B, xs: x0 + s.xs * B, xe: x0 + s.xe * B, ceil: H(s.ceil), surface: H(s.surface), theme: s.theme, tip: tipsSeen["ug:" + s.theme] ? null : "ug:" + s.theme }); break;
       case "lava": Object.assign(o, { x: X, w: s.w * B, top: H(s.top), theme: s.theme || "mine" }); break;
       case "lc": Object.assign(o, { x: X, w: s.w * B, bottom: H(s.bottom) + (s.clear ? s.clear * B : LOW_CEIL), cave: !!s.clear }); break;
-      case "fb": Object.assign(o, { x: X, w: s.w * B, hh: s.h, land: H(s.land), start: H(s.land) + 6 * B, bot: H(s.land) + 6 * B, vy: 0, state: "wait", timer: 0 });
+      case "fb": Object.assign(o, { x: X, w: s.w * B, hh: s.h, land: H(s.land), start: H(s.land) + 6 * B, bot: H(s.land) + 6 * B, vy: 0, state: "wait", timer: 0, shakeT: 0.6, lead: 0.9 });
         if (s.uceil !== undefined) {
           // a stalactite: hangs in plain sight under the ceiling, shakes for a long time and lands well before you get there
           const st = H(s.uceil) - s.h * B;
@@ -3644,6 +3677,56 @@
       else if (next.top < f.top) side(g, x1, y, GROUND - next.top);
     }
   }
+  // Where two blocks touch side by side, paint each one's inside texture over
+  // the seam so a structure reads as one piece instead of separate boxes.
+  function blendBlockSeams(g, st, t) {
+    if (st.noSeamBlend) return;                       // ice slabs already meet on thin light edges
+    const vis = S.objs.filter(o => o.t === "b" && !o.terrain && o.x - camX < vR + 60 && o.x + o.w - camX > vL - 60);
+    for (let i = 0; i < vis.length; i++) for (let j = 0; j < vis.length; j++) {
+      const a = vis[i], b = vis[j];
+      if (i === j || Math.abs(a.x + a.w - b.x) > 1) continue;
+      const lo = Math.max(a.bot, b.bot), hi = Math.min(a.top, b.top);
+      if (hi - lo < 8) continue;
+      const sx = b.x - camX, y0 = GROUND - hi + 3, y1 = GROUND - lo - 3;
+      for (const [o, dir] of [[a, -1], [b, 1]]) {
+        const x = o.x - camX, bh = o.top - o.bot;
+        g.save(); g.beginPath(); g.rect(dir < 0 ? sx - 5 : sx, y0, 5, y1 - y0); g.clip();
+        // draw the block stretched past the seam so its own outline lands outside the clip
+        st.block(g, dir < 0 ? x : x - 2 * B, GROUND - o.top, o.w + 2 * B, bh, o.seed);   // a whole-tile stretch keeps the texture grid aligned
+        g.restore();
+      }
+    }
+  }
+  // A mode portal (ship, ball, back to cube): a gate that spans the whole
+  // tunnel, floor to ceiling, in the portal's colour, with light running
+  // through it and the mode's icon in the middle.
+  function drawModePortal(g, st, x, o, t) {
+    const col = PORTAL_COL[o.icon] || "#ffffff", cx = x + B / 2, yb = GROUND - o.base, yt = GROUND - o.ceil, h = yb - yt, ink = st.ink || "#111";
+    drawGlow(g, hexRgb(col), cx, (yt + yb) / 2, Math.max(160, h * 0.9));
+    // the beam between the pillars
+    const beam = g.createLinearGradient(cx - 18, 0, cx + 18, 0);
+    beam.addColorStop(0, "rgba(255,255,255,0)"); beam.addColorStop(0.5, col); beam.addColorStop(1, "rgba(255,255,255,0)");
+    g.globalAlpha = 0.45; g.fillStyle = beam; g.fillRect(cx - 18, yt, 36, h); g.globalAlpha = 1;
+    // light bands streaming through it
+    g.save(); g.beginPath(); g.rect(cx - 16, yt, 32, h); g.clip();
+    g.fillStyle = "#ffffff"; g.globalAlpha = 0.55;
+    for (let i = 0; i < 6; i++) { const y = yt + ((i / 6 + t * 0.6) % 1) * h; g.beginPath(); g.ellipse(cx, y, 12, 3, 0, 0, TAU); g.fill(); }
+    g.restore(); g.globalAlpha = 1;
+    // pillars, capped where they meet the floor and the ceiling
+    for (const px of [cx - 20, cx + 20]) {
+      const pl = g.createLinearGradient(px - 5, 0, px + 5, 0);
+      pl.addColorStop(0, shade(col, 0.7)); pl.addColorStop(0.5, shade(col, 1.25)); pl.addColorStop(1, shade(col, 0.7));
+      g.fillStyle = pl; g.fillRect(px - 5, yt, 10, h);
+      g.lineWidth = 2.5; g.strokeStyle = ink; g.strokeRect(px - 5, yt, 10, h);
+    }
+    for (const y of [yt, yb - 10]) { g.fillStyle = shade(col, 0.8); g.fillRect(cx - 27, y, 54, 10); g.lineWidth = 2.5; g.strokeStyle = ink; g.strokeRect(cx - 27, y, 54, 10); }
+    // the mode's icon in a badge at the middle
+    const my = (yt + yb) / 2;
+    g.beginPath(); g.arc(cx, my, 19, 0, TAU); g.fillStyle = shade(col, 0.55); g.fill(); g.lineWidth = 3; g.strokeStyle = "#ffffff"; g.stroke();
+    st.icon(g, o.icon, cx, my);
+  }
+  const hexRgb = hex => { const n = parseInt(hex.slice(1), 16); return `${n >> 16},${(n >> 8) & 255},${n & 255}`; };
+
   // ---- Signature-section art --------------------------------------------
   // Each signature section has its own palette, wall texture, lights and
   // hazard drawings, so no two look alike.
@@ -4058,18 +4141,18 @@
         }
         case "fb": {
           const tp = o.bot + o.hh * B;
+          if (o.state !== "rest") {
+            // warning: a red drop line and a target on the floor, blinking once it starts to shake
+            const fy = GROUND - o.land, a = o.state === "wait" ? 0.55 : 0.55 + 0.45 * (Math.sin(t * 28) > 0 ? 1 : 0);
+            g.save(); g.globalAlpha = a;
+            g.setLineDash([6, 6]); g.beginPath(); g.moveTo(x + o.w / 2, GROUND - o.bot); g.lineTo(x + o.w / 2, fy - 4);
+            g.lineWidth = 2.5; g.strokeStyle = "#ff4d4d"; g.stroke(); g.setLineDash([]);
+            g.beginPath(); g.rect(x + 2, fy - 6, o.w - 4, 6); g.fillStyle = "rgba(255,60,60,0.45)"; g.fill();
+            g.lineWidth = 2; g.strokeStyle = "#ff4d4d"; g.stroke();
+            g.restore();
+          }
           if (o.ug) {
             const sx = o.state === "shake" && !reducedMotion ? x + Math.sin(t * 90) * 2.5 : x;
-            if (o.state !== "rest") {
-              // warning: a red drop line and a target on the floor, blinking once it starts to shake
-              const fy = GROUND - o.land, a = o.state === "wait" ? 0.55 : 0.55 + 0.45 * (Math.sin(t * 28) > 0 ? 1 : 0);
-              g.save(); g.globalAlpha = a;
-              g.setLineDash([6, 6]); g.beginPath(); g.moveTo(x + o.w / 2, GROUND - tp + o.hh * B); g.lineTo(x + o.w / 2, fy - 4);
-              g.lineWidth = 2.5; g.strokeStyle = "#ff4d4d"; g.stroke(); g.setLineDash([]);
-              g.beginPath(); g.ellipse(x + o.w / 2, fy - 3, o.w * 0.75, 6, 0, 0, TAU); g.fillStyle = "rgba(255,60,60,0.45)"; g.fill();
-              g.lineWidth = 2; g.strokeStyle = "#ff4d4d"; g.stroke();
-              g.restore();
-            }
             drawThemeFall(g, o, sx, t);
             break;
           }
@@ -4097,7 +4180,8 @@
           st.orb(g, x + B / 2, GROUND - o.cy, o.used, t, KIND_COL[o.kind]);
           if (!st.pixel && !o.used) kindGlyph(g, o.kind, x + B / 2, GROUND - o.cy, st.ink);
           break;
-        case "mp": case "sp": {
+        case "mp": drawModePortal(g, st, x, o, t); break;
+        case "sp": {
           const cy = GROUND - (o.base + 100);
           st.gportal(g, x + B / 2, cy, null, t, PORTAL_COL[o.icon]);
           st.icon(g, o.icon, x + B / 2, cy);
@@ -4121,6 +4205,7 @@
         case "gp": st.gportal(g, x + B / 2, GROUND - (o.base + CEIL_H / 2), o.flip, t); break;
       }
     }
+    blendBlockSeams(g, st, t);
     if (S.portalX !== null && S.mode === "play") st.lportal(g, S.portalX - camX, GROUND - (S.portalH + 110), t);
     for (const cp of cps) {
       const x = cp.player.x - camX + P / 2, y = GROUND - (cp.player.h + cp.ph / 2);
