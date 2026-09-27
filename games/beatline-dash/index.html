@@ -3,7 +3,7 @@
 <title>Beatline Dash</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Chakra+Petch:wght@500;700&family=Fredoka:wght@600&family=Kalam:wght@400;700&family=Lilita+One&family=Nunito:wght@400;700;800&family=Permanent+Marker&family=Press+Start+2P&family=VT323&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Chakra+Petch:wght@500;700&family=Fredoka:wght@600&family=Kalam:wght@400;700&family=Lilita+One&family=Nunito:wght@400;700;800&family=Permanent+Marker&display=swap">
 <style>
   /* Every zone has its own look. The menus and HUD read their colors, fonts and
      borders from the active zone's variables, set via data-style on <html>. */
@@ -20,10 +20,10 @@
     color-scheme: dark;
     --bg: #120a08; --ink: #ffd23f; --dim: #ef8a23; --panel: #2e1810; --line: #000000;
     --accent: #ef8a23; --on-accent: #120a08; --hot: #ffd23f;
-    --radius: 0; --bw: 4px; --shadow: 4px 4px 0 #000000; --title-shadow: 4px 4px 0 #a4491d;
-    --display: "Press Start 2P", "Courier New", monospace;
-    --body: "VT323", "Courier New", monospace;
-    --dscale: 0.62; --bscale: 1.3;
+    --radius: 6px; --bw: 3px; --shadow: 0 4px 0 #000000; --title-shadow: 0 4px 0 #a4491d;
+    --display: "Chakra Petch", "Segoe UI", sans-serif;
+    --body: "Nunito", "Segoe UI", system-ui, sans-serif;
+    --dscale: 1.05; --bscale: 1;
   }
   [data-style="reef"] {
     color-scheme: light;
@@ -105,7 +105,7 @@
   .env { font-size: 0.72em; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); margin-top: 3px; }
   .hud-c { grid-area: bar; justify-self: center; width: min(100%, 320px); padding: 5px 10px 3px; box-sizing: border-box; }
   .bar { height: 7px; background: color-mix(in srgb, var(--ink) 14%, transparent); position: relative; overflow: hidden; border-radius: 99px; }
-  [data-style="forge"] .bar, [data-style="glacier"] .bar { border-radius: 0; }
+  [data-style="glacier"] .bar { border-radius: 0; }
   #barFill { position: absolute; inset: 0 auto 0 0; width: 0%; background: var(--accent); }
   #barBest { position: absolute; top: 0; bottom: 0; width: 3px; margin-left: -1.5px; background: var(--hot); }
   .next { margin-top: 5px; font-size: 0.85em; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; text-align: center; font-variant-numeric: tabular-nums; }
@@ -366,7 +366,7 @@
   const low = document.createElement("canvas"), lctx = low.getContext("2d");   // 8-bit zone renders here
   let dpr = 1, scale = 1, viewW = 800, viewH = VIEW_H, offY = 0, playerSX = 200, camX = 0;
   function resize() {
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    dpr = Math.min(window.devicePixelRatio || 1, 3);   // full sharpness on high-density phone screens
     const cw = window.innerWidth, ch = window.innerHeight;
     canvas.width = Math.round(cw * dpr);
     canvas.height = Math.round(ch * dpr);
@@ -705,164 +705,185 @@
   })();
 
   // =========================================================================
-  // ZONE 2: FORGE (8-bit pixel art on a low-res grid, no anti-aliasing)
+  // ZONE 2: FORGE (molten industrial: glowing furnaces, riveted iron, hot brick)
   // =========================================================================
   const Forge = (() => {
-    const K = "#120a08", D = "#2e1810", M = "#5c2e17", R = "#a4491d", O = "#ef8a23", Y = "#ffd23f", L = "#fff3b0", SM = "#3a2620";
-    const SKY = ["#120a08", "#1a0d09", "#24110b", "#31160d", "#40190e", "#521e10", "#662412", "#7c2c14"];
-    const snap = v => Math.round(v / PX) * PX;
-    function px(g, x, y, w, h, c) { g.fillStyle = c; g.fillRect(snap(x), snap(y), Math.max(PX, snap(w)), Math.max(PX, snap(h))); }
-    function disc(g, cx, cy, rc, c) {
-      const CX = Math.round(cx / PX), CY = Math.round(cy / PX); g.fillStyle = c;
-      for (let dy = -rc; dy <= rc; dy++) { const half = Math.floor(Math.sqrt(rc * rc - dy * dy) + 0.35); g.fillRect((CX - half) * PX, (CY + dy) * PX, (2 * half + 1) * PX, PX); }
+    const C = { ink: "#140a07", sky0: "#1a0c08", sky1: "#5a1f0e", glow: "#ff7a1f", hot: "#ffd23f", white: "#fff3b0", brick: "#6b3119", brickDk: "#4a200f", mortar: "#2a120a", iron: "#4b3a33", ironDk: "#2b201c", ironLt: "#7a6457", rim: "#ff9a2e", soot: "#2a1a15", ember: "#ffb13b" };
+    const out = (g, w = 3) => { g.lineWidth = w; g.strokeStyle = C.ink; g.lineJoin = "round"; g.lineCap = "round"; g.stroke(); };
+    const fillOut = (g, color, w) => { g.fillStyle = color; g.fill(); out(g, w); };
+    function glowDisc(g, cx, cy, r, col, a) {
+      const grd = g.createRadialGradient(cx, cy, 1, cx, cy, r); grd.addColorStop(0, col); grd.addColorStop(1, "rgba(255,120,30,0)");
+      g.globalAlpha = a; g.fillStyle = grd; g.fillRect(cx - r, cy - r, r * 2, r * 2); g.globalAlpha = 1;
     }
-    function bricks(g, x, y0, w, rows, fill) {
-      const bw = PX * 8, bh = PX * 3;
-      for (let r = 0; r < rows; r++) {
-        const y = y0 + r * bh, shift = (r % 2) * (bw / 2), start = x - ((((snap(camX + x) + shift) % bw) + bw) % bw);
-        px(g, x, y, w, bh, fill);
-        px(g, x, y + bh - PX, w, PX, K);
-        for (let bx = start; bx < x + w; bx += bw) { if (bx >= x) px(g, bx, y, PX, bh - PX, K); if (bx + PX >= x && bx + PX * 3 <= x + w) px(g, bx + PX, y, PX * 2, PX, R); }
+    function bricks(g, x0, x1, y0, y1) {
+      g.fillStyle = C.brick; g.fillRect(x0, y0, x1 - x0, y1 - y0);
+      const bw = 32, bh = 14;
+      g.beginPath();
+      for (let r = 0, y = y0; y < y1; r++, y += bh) {
+        g.moveTo(x0, y); g.lineTo(x1, y);
+        const shift = r % 2 ? bw / 2 : 0, start = x0 - ((((camX + x0 + shift) % bw) + bw) % bw);
+        for (let bx = start; bx < x1; bx += bw) if (bx > x0) { g.moveTo(bx, y); g.lineTo(bx, Math.min(y + bh, y1)); }
+      }
+      g.lineWidth = 2.5; g.strokeStyle = C.mortar; g.stroke();
+      // a few darker, heat-stained bricks
+      const i0 = Math.floor((camX + x0) / bw) - 1;
+      g.fillStyle = C.brickDk;
+      for (let i = i0; i < i0 + (x1 - x0) / bw + 2; i++) for (let r = 0; r < 6; r++) {
+        if (hash(i * 13.7 + r * 5.1) < 0.8) continue;
+        const shift = r % 2 ? bw / 2 : 0, bx = i * bw - camX - shift + ((r % 2) ? bw : 0), by = y0 + r * bh;
+        if (bx + bw > x0 && bx < x1 && by < y1) g.fillRect(Math.max(bx + 2, x0), by + 2, Math.min(bw - 4, x1 - bx - 2), bh - 4);
       }
     }
-    const SPW = [10, 10, 8, 8, 6, 6, 4, 4, 2, 2];
-    const SPR = ["KKKKKKKKK", "KYYYYYYOK", "KYLYYYYOK", "KYYKYYKOK", "KYYKYYKOK", "KYYYYYYOK", "KYKKKKYOK", "KOOOOOOOK", "KKKKKKKKK"];
-    const DUCK = ["KKKKKKKKKKK", "KYYKYYYKYOK", "KYYYYYYYYOK", "KOOOOOOOOOK", "KKKKKKKKKKK"];
-    const PAL = { K, Y, O, L };
-    function sprite(g, rows, cx, cy, q, flipV) {
-      const n = rows.length, m = rows[0].length;
-      const X0 = Math.round(cx / PX) - (m >> 1), Y0 = Math.round(cy / PX) - (n >> 1);
-      for (let r = 0; r < n; r++) for (let c = 0; c < m; c++) {
-        let r2 = flipV ? n - 1 - r : r, c2 = c;
-        for (let k = 0; k < q; k++) { const tmp = r2; r2 = c2; c2 = n - 1 - tmp; }
-        if (rows[r][c] === ".") continue;
-        g.fillStyle = PAL[rows[r][c]]; g.fillRect((X0 + c2) * PX, (Y0 + r2) * PX, PX, PX);
-      }
-    }
+    function rivet(g, x, y) { g.beginPath(); g.arc(x, y, 2.6, 0, TAU); g.fillStyle = C.ironLt; g.fill(); g.lineWidth = 1.2; g.strokeStyle = C.ink; g.stroke(); }
     return {
-      id: "forge", name: "Forge", pixel: true, isNew: "Saws, pink orbs and your first ship section", note: 40, bass: "square", lead: "square", cutoff: 1400,
+      id: "forge", name: "Forge", isNew: "Saws, pink orbs and your first ship section", note: 40, bass: "square", lead: "square", cutoff: 1400,
       bg(g, t) {
-        const top = snap(-offY - 400), n = SKY.length, bh = Math.max(PX, snap((GROUND - top) / n));
-        for (let i = 0; i < n; i++) {
-          const y = top + i * bh;
-          px(g, -PX, y, viewW + PX * 3, i === n - 1 ? GROUND - y : bh, SKY[i]);
-          if (i < n - 1) { g.fillStyle = SKY[i + 1]; for (let x = 0; x < viewW + PX; x += PX * 2) g.fillRect(snap(x), y + bh - PX, PX, PX); }
-        }
-        const off = snap(camX * 0.12);
-        for (let x = 0; x < viewW + PX * 2; x += PX * 2) {
-          const w = x + off, h = 70 + 45 * Math.sin(w * 0.008) + 25 * Math.sin(w * 0.021 + 1);
-          px(g, x, GROUND - h, PX * 2, h, "#2a120b");
-        }
-        const seg = 140, off2 = camX * 0.35, i0 = Math.floor(off2 / seg) - 1;
+        const top = -offY - 400;
+        const sky = g.createLinearGradient(0, top + 380, 0, GROUND);
+        sky.addColorStop(0, C.sky0); sky.addColorStop(0.7, "#3a130a"); sky.addColorStop(1, C.sky1);
+        g.fillStyle = sky; g.fillRect(-10, top, viewW + 20, GROUND - top);
+        // distant furnace glow along the horizon
+        const hz = g.createLinearGradient(0, GROUND - 160, 0, GROUND);
+        hz.addColorStop(0, "rgba(255,110,30,0)"); hz.addColorStop(1, "rgba(255,110,30,0.35)");
+        g.fillStyle = hz; g.fillRect(-10, GROUND - 160, viewW + 20, 160);
+        // far ridge
+        const off = camX * 0.12;
+        g.beginPath(); g.moveTo(-10, GROUND);
+        for (let x = -10; x <= viewW + 20; x += 12) { const w = x + off; g.lineTo(x, GROUND - (70 + 45 * Math.sin(w * 0.008) + 25 * Math.sin(w * 0.021 + 1))); }
+        g.lineTo(viewW + 20, GROUND); g.closePath(); g.fillStyle = "#2a120b"; g.fill();
+        // factory silhouettes with lit windows and smoke
+        const seg = 150, off2 = camX * 0.35, i0 = Math.floor(off2 / seg) - 1;
         for (let i = i0; i < i0 + viewW / seg + 3; i++) {
-          const x = i * seg - off2 + hash(i) * 40, h = 60 + hash(i + 3) * 90, w = 32 + hash(i + 7) * 28;
-          px(g, x, GROUND - h, w, h, K);
-          px(g, x + w - 12, GROUND - h - 36, 8, 36, K);
-          for (let k = 0; k < 2; k++) px(g, x + 6 + k * 12, GROUND - h + 12, 4, 8, hash(i * 9 + k + Math.floor(t * 4)) > 0.35 ? O : R);
-          for (let k = 0; k < 3; k++) { const ph = (t * 0.5 + k / 3 + hash(i)) % 1, s = 12 - ph * 6; px(g, x + w - 14 + ph * 10, GROUND - h - 44 - ph * 70, s, s, SM); }
+          const x = i * seg - off2 + hash(i) * 40, h = 60 + hash(i + 3) * 90, w = 34 + hash(i + 7) * 30;
+          g.fillStyle = C.ink; g.fillRect(x, GROUND - h, w, h); g.fillRect(x + w - 13, GROUND - h - 40, 9, 40);
+          for (let k = 0; k < 2; k++) { g.fillStyle = hash(i * 9 + k + Math.floor(t * 3)) > 0.3 ? C.glow : "#a4491d"; g.fillRect(x + 7 + k * 13, GROUND - h + 12, 6, 9); }
+          for (let k = 0; k < 3; k++) {
+            const ph = (t * 0.45 + k / 3 + hash(i)) % 1;
+            g.globalAlpha = 0.5 * (1 - ph); g.beginPath(); g.arc(x + w - 9 + ph * 16, GROUND - h - 46 - ph * 70, 6 + ph * 10, 0, TAU); g.fillStyle = C.soot; g.fill(); g.globalAlpha = 1;
+          }
         }
-        for (let x = 0; x < viewW + PX; x += PX * 2) px(g, x + ((Math.round(x / PX / 2) % 2) * PX), GROUND - PX * 2, PX, PX, R);
-        const PIT = ["#2a1208", "#1d0c06", "#140806"];
-        PIT.forEach((c, i) => px(g, -PX, GROUND + i * PX * 6, viewW + PX * 3, PX * 6, c));
-        px(g, -PX, GROUND + PX * 18, viewW + PX * 3, 1600, K);
-        for (let x = 0; x < viewW + PX; x += PX * 2) px(g, x + ((Math.round(x / PX / 2) % 2) * PX), GROUND + PX * 6, PX, PX, "#1d0c06");
+        const pit = g.createLinearGradient(0, GROUND, 0, GROUND + 260);
+        pit.addColorStop(0, "#3a160b"); pit.addColorStop(1, "#0e0604");
+        g.fillStyle = pit; g.fillRect(-10, GROUND, viewW + 20, 1600);
       },
       ground(g, x0, x1, bottom) {
-        px(g, x0, GROUND, x1 - x0, bottom - GROUND, D);
-        px(g, x0, GROUND, x1 - x0, PX, Y);
-        px(g, x0, GROUND + PX, x1 - x0, PX, O);
-        bricks(g, x0, GROUND + PX * 2, x1 - x0, 10, M);
+        bricks(g, x0, x1, GROUND + 10, bottom);
+        const rim = g.createLinearGradient(0, GROUND, 0, GROUND + 12);
+        rim.addColorStop(0, C.hot); rim.addColorStop(1, C.rim);
+        g.fillStyle = rim; g.fillRect(x0, GROUND, x1 - x0, 11);
+        g.beginPath(); g.moveTo(x0, GROUND); g.lineTo(x1, GROUND); out(g, 3);
+        g.beginPath(); g.moveTo(x0, GROUND + 11); g.lineTo(x1, GROUND + 11); out(g, 2);
       },
-      side(g, x, y0, y1) { px(g, x - PX / 2, y0, PX, y1 - y0, K); },
+      side(g, x, y0, y1) { g.beginPath(); g.moveTo(x, y0); g.lineTo(x, y1); out(g, 3.5); },
       roof(g, x, w, y) {
-        const top = snap(wTop) - PX;
-        px(g, x, top, w, y - top, D);
-        bricks(g, x, snap(y - PX * 2 - 30 * PX) , w, 10, M);
-        px(g, x, y - PX * 2, w, PX, O);
-        px(g, x, y - PX, w, PX, Y);
+        const top = wTop - 10;
+        bricks(g, x, x + w, top, y - 11);
+        g.fillStyle = C.rim; g.fillRect(x, y - 11, w, 11);
+        g.beginPath(); g.rect(x, top, w, y - top); out(g, 3);
       },
       spike(g, x, by, dir) {
-        const X = snap(x), BY = snap(by);
-        for (let i = 0; i < 10; i++) {
-          const w = SPW[i], y = dir > 0 ? BY - (i + 1) * PX : BY + i * PX, x0 = X + ((10 - w) / 2) * PX;
-          g.fillStyle = K; g.fillRect(x0, y, w * PX, PX);
-          if (w > 2 && i < 9) { g.fillStyle = i < 2 ? R : O; g.fillRect(x0 + PX, y, (w - 2) * PX, PX); g.fillStyle = Y; g.fillRect(x0 + PX, y, PX, PX); }
-        }
+        const tip = by - dir * (B - 5);
+        tri(g, x + 4, by, x + B / 2, tip, x + B - 4, by);
+        const grd = g.createLinearGradient(0, by, 0, tip); grd.addColorStop(0, "#8a3a15"); grd.addColorStop(1, C.hot);
+        g.fillStyle = grd; g.fill(); out(g, 2.8);
+        g.beginPath(); g.moveTo(x + B / 2 - 2, tip + dir * 8); g.lineTo(x + 12, by - dir * 5); g.lineWidth = 2.2; g.strokeStyle = C.white; g.stroke();
       },
       block(g, x, y, w, h) {
-        px(g, x, y, w, h, K); px(g, x + PX, y + PX, w - PX * 2, h - PX * 2, M); px(g, x + PX, y + PX, w - PX * 2, PX, R);
+        g.fillStyle = C.iron; g.fillRect(x, y, w, h);
+        g.fillStyle = C.ironLt; g.fillRect(x + 3, y + 3, w - 6, 4);
+        g.beginPath();
+        for (let cx = x + B; cx < x + w - 1; cx += B) { g.moveTo(cx, y); g.lineTo(cx, y + h); }
+        for (let cy = y + B; cy < y + h - 1; cy += B) { g.moveTo(x, cy); g.lineTo(x + w, cy); }
+        g.lineWidth = 2; g.strokeStyle = C.ironDk; g.stroke();
         for (let cx = x; cx < x + w - 1; cx += B) for (let cy = y; cy < y + h - 1; cy += B) {
-          px(g, cx + PX * 4, cy + PX * 4, B - PX * 8, B - PX * 8, D);
-          for (const [dx, dy] of [[2, 2], [7, 2], [2, 7], [7, 7]]) px(g, cx + dx * PX, cy + dy * PX, PX, PX, Y);
+          rivet(g, cx + 7, cy + 7); rivet(g, cx + B - 7, cy + 7); rivet(g, cx + 7, cy + B - 7); rivet(g, cx + B - 7, cy + B - 7);
         }
+        g.beginPath(); g.rect(x, y, w, h); out(g, 3);
       },
       saw(g, cx, cy, r, ang) {
-        const rc = Math.round(r / PX) - 1;
-        disc(g, cx, cy, rc + 1, K); disc(g, cx, cy, rc, R); disc(g, cx, cy, Math.max(1, Math.round(rc * 0.45)), K);
-        for (let i = 0; i < 8; i++) {
-          const a = ang + (i * TAU) / 8;
-          px(g, cx + Math.cos(a) * r - PX, cy + Math.sin(a) * r - PX, PX * 2, PX * 2, Y);
-          px(g, cx + Math.cos(a + 0.2) * r * 0.66, cy + Math.sin(a + 0.2) * r * 0.66, PX, PX, O);
-        }
+        glowDisc(g, cx, cy, r * 1.5, "rgba(255,140,40,0.5)", 1);
+        polyPath(g, sawPts(cx, cy, r, ang, 10, 7));
+        const grd = g.createRadialGradient(cx, cy, 2, cx, cy, r); grd.addColorStop(0, C.hot); grd.addColorStop(1, "#c0501c");
+        g.fillStyle = grd; g.fill(); out(g, 2.5);
+        g.beginPath(); g.arc(cx, cy, r * 0.38, 0, TAU); fillOut(g, C.ironDk, 2);
+        g.beginPath(); g.arc(cx, cy, 3.5, 0, TAU); g.fillStyle = C.ember; g.fill();
       },
-      chain(g, x, y0, y1) { for (let y = snap(y0), i = 0; y < y1; y += PX, i++) px(g, x - PX / 2, y, PX, PX, i % 3 === 2 ? K : R); },
-      track(g, x, y0, y1) { px(g, x - PX, y0, PX * 2, y1 - y0, D); px(g, x - PX, y0, PX, y1 - y0, M); },
+      chain(g, x, y0, y1) {
+        g.beginPath();
+        for (let y = y0, i = 0; y < y1; y += 10, i++) { if (i % 2) g.rect(x - 2, y, 4, 10); else g.ellipse(x, y + 5, 4, 6, 0, 0, TAU); }
+        g.lineWidth = 2; g.strokeStyle = C.ironLt; g.stroke();
+      },
+      track(g, x, y0, y1) { g.fillStyle = C.ironDk; g.fillRect(x - 5, y0, 10, y1 - y0); g.fillStyle = C.iron; g.fillRect(x - 2, y0, 4, y1 - y0); g.beginPath(); g.rect(x - 5, y0, 10, y1 - y0); out(g, 2); },
       pad(g, x, by, used, t, col) {
-        px(g, x + PX * 2, by - PX * 3, B - PX * 4, PX * 3, K);
-        px(g, x + PX * 3, by - PX * 3, B - PX * 6, PX * 2, used ? R : col || Y);
-        for (let k = 0; k < 3; k++) px(g, x + PX * 4 + k * PX * 3, by - PX * 3, PX, PX * 2, K);
+        g.beginPath(); g.rect(x + 6, by - 7, B - 12, 7); fillOut(g, C.iron, 2);
+        g.beginPath(); g.ellipse(x + B / 2, by - 8, 13, 5, 0, 0, TAU); fillOut(g, used ? "#6b3119" : col || C.hot, 2);
+        if (!used) glowDisc(g, x + B / 2, by - 10, 18, "rgba(255,200,80,0.6)", 0.8);
       },
       orb(g, cx, cy, used, t, col) {
-        disc(g, cx, cy, 4, used ? R : col || Y); disc(g, cx, cy, 3, K);
-        if (!used) disc(g, cx, cy, 1, Math.floor(t * 6) % 2 ? L : O);
+        if (!used) glowDisc(g, cx, cy, 30, "rgba(255,200,80,0.55)", 0.6 + 0.2 * Math.sin(t * 6));
+        g.beginPath(); g.arc(cx, cy, 15, 0, TAU); fillOut(g, used ? "#6b3119" : col || C.hot, 2.5);
+        g.beginPath(); g.arc(cx, cy, 19 + Math.sin(t * 5) * 2, 0, TAU); g.lineWidth = 2; g.strokeStyle = used ? "#6b3119" : C.white; g.globalAlpha = 0.6; g.stroke(); g.globalAlpha = 1;
       },
       barrier(g, x, w, yb, t, seed) {
-        const top = snap(wTop) - PX;
-        px(g, x, top, w, yb - top - PX * 3, D);
-        bricks(g, x, snap(yb - PX * 3 - 15 * PX), w, 5, M);
-        for (let c = 0; c * PX < w; c++) px(g, x + c * PX, yb - PX * 4, PX, PX, (c + Math.floor(t * 4)) % 4 < 2 ? Y : K);
-        for (let c = 0; c * PX < w; c++) px(g, x + c * PX, yb - PX * 3, PX, PX * (1 + Math.floor(hash(seed + c) * 3)), K);
+        const top = wTop - 10;
+        bricks(g, x, x + w, top, yb - 12);
+        for (let i = 0; i * 10 < w; i++) { g.fillStyle = (i + Math.floor(t * 4)) % 4 < 2 ? C.hot : C.ink; g.fillRect(x + i * 10, yb - 12, 10, 6); }
+        g.fillStyle = C.ironDk; g.fillRect(x, yb - 6, w, 6);
+        g.beginPath(); g.rect(x, top, w, yb - top); out(g, 3);
       },
       gportal(g, cx, cy, flip, t, pc) {
-        const h = 200, col = pc || (flip ? Y : O), dir = flip ? -1 : 1;
-        px(g, cx - 20, cy - h / 2, 40, h, K);
-        px(g, cx - 16, cy - h / 2 + PX, 32, h - PX * 2, flip ? "#3a2a10" : "#3a1a0c");
-        px(g, cx - 20, cy - h / 2, PX * 2, h, col); px(g, cx + 20 - PX * 2, cy - h / 2, PX * 2, h, col);
+        const h = 200, col = pc || (flip ? C.hot : C.glow), dir = flip ? -1 : 1;
+        glowDisc(g, cx, cy, 70, "rgba(255,160,60,0.5)", 0.6);
+        g.beginPath(); g.roundRect ? g.roundRect(cx - 20, cy - h / 2, 40, h, 10) : g.rect(cx - 20, cy - h / 2, 40, h);
+        g.fillStyle = "#2a120a"; g.fill(); g.lineWidth = 6; g.strokeStyle = col; g.stroke(); out(g, 2);
         if (flip === null) return;
-        for (let i = 0; i < 3; i++) {
-          const ay = cy - 60 + (((i * 40 + t * 80 * dir) % 120) + 120) % 120;
-          for (let k = 0; k <= 3; k++) { px(g, cx - (4 - k) * PX, ay + dir * k * PX, PX, PX, L); px(g, cx + (3 - k) * PX, ay + dir * k * PX, PX, PX, L); }
-        }
+        g.beginPath();
+        for (let i = 0; i < 3; i++) { const ay = cy - 60 + (((i * 40 + t * 80 * dir) % 120) + 120) % 120; g.moveTo(cx - 11, ay - dir * 7); g.lineTo(cx, ay + dir * 7); g.lineTo(cx + 11, ay - dir * 7); }
+        g.lineWidth = 3.5; g.strokeStyle = C.white; g.stroke();
       },
       lportal(g, cx, cy, t) {
-        const f = Math.floor(t * 8);
-        for (let i = 0; i < 40; i++) { const a = (i / 40) * TAU; px(g, cx + Math.cos(a) * 28 - PX, cy + Math.sin(a) * 100 - PX, PX * 2, PX * 2, (i + f) % 2 ? Y : O); }
-        px(g, cx - PX, cy - 70, PX * 2, 140, L);
+        glowDisc(g, cx, cy, 120, "rgba(255,170,60,0.6)", 0.7);
+        g.beginPath(); g.ellipse(cx, cy, 30, 104, 0, 0, TAU); g.fillStyle = "#3a160b"; g.fill(); g.lineWidth = 7; g.strokeStyle = C.hot; g.stroke(); out(g, 2.5);
+        g.save(); g.beginPath(); g.ellipse(cx, cy, 24, 96, 0, 0, TAU); g.clip();
+        for (let i = 0; i < 6; i++) { const y = cy - 100 + ((i * 36 + t * 90) % 200); g.fillStyle = i % 2 ? C.glow : C.hot; g.fillRect(cx - 24, y, 48, 5); }
+        g.restore();
       },
       player(g, cx, cy, rot, duck, flip) {
-        if (duck) sprite(g, DUCK, cx, cy, 0, flip);
-        else sprite(g, SPR, cx, cy, ((Math.round(rot / (Math.PI / 2)) % 4) + 4) % 4, flip);
+        g.save(); g.translate(cx, cy); if (flip) g.scale(1, -1); g.rotate(duck ? 0 : rot);
+        const w = duck ? P + 6 : P, h = duck ? DUCK_H : P;
+        g.beginPath(); g.rect(-w / 2, -h / 2, w, h);
+        const grd = g.createLinearGradient(0, -h / 2, 0, h / 2); grd.addColorStop(0, C.hot); grd.addColorStop(1, C.glow);
+        g.fillStyle = grd; g.fill(); out(g, 3);
+        g.fillStyle = C.ink;
+        if (duck) { g.fillRect(2, -4, 5, 4); g.fillRect(10, -4, 5, 4); }
+        else { g.fillRect(2, -8, 5, 9); g.fillRect(10, -8, 5, 9); g.fillRect(-8, 6, 20, 3); }
+        g.restore();
       },
-      ink: "#120a08",
-      ship(g, cx, cy) { sprite(g, ["....KKK....", "...KYYYK...", "...KYKYK...", "KKKKKKKKKKK", "KOOOOOOOOOK", ".KOOOOOOOK.", "..KKKKKKK.."], cx, cy, 0, false); },
-      ball(g, cx, cy, rot) { sprite(g, ["..KKKKK..", ".KYYYYYK.", "KYYKYKYYK", "KYYYYYYYK", "KYKYYYKYK", "KYYKKKYYK", "KYYYYYYYK", ".KOOOOOK.", "..KKKKK.."], cx, cy, ((Math.round(rot / (Math.PI / 2)) % 4) + 4) % 4, false); },
-      star(g, cx, cy, t) { sprite(g, ["...Y...", "..YLY..", "YYYLYYY", ".YYLYY.", "..YYY..", ".YY.YY.", "Y.....Y"], cx, cy + (Math.floor(t * 4) % 2) * PX, 0, false); },
-      icon(g, kind, cx, cy) {
-        const I = {
-          ship: [".......", "LLL....", "L.LLLL.", "LLLLLLL", ".LLLLL."], ball: [".LLL.", "L...L", "L...L", "L...L", ".LLL."], cube: ["LLLLL", "L...L", "L...L", "L...L", "LLLLL"],
-          slow: ["..L", ".L.", "L..", ".L.", "..L"], normal: ["L...L..", ".L...L.", "..L...L", ".L...L.", "L...L.."],
-          fast: ["L..L..L..", ".L..L..L.", "..L..L..L", ".L..L..L.", "L..L..L.."], vfast: ["L.L.L.L..", ".L.L.L.L.", "..L.L.L.L", ".L.L.L.L.", "L.L.L.L.."],
-        };
-        sprite(g, I[kind], cx, cy, 0, false);
+      ink: "#140a07",
+      ship(g, cx, cy, tilt) {
+        g.save(); g.translate(cx, cy); g.rotate(tilt);
+        g.beginPath(); g.moveTo(-20, 2); g.lineTo(20, 2); g.lineTo(13, 12); g.lineTo(-16, 12); g.closePath(); fillOut(g, C.glow, 2.5);
+        g.beginPath(); g.rect(-9, -13, 18, 15); fillOut(g, C.hot, 2.5);
+        g.fillStyle = C.ink; g.fillRect(2, -9, 4, 6);
+        g.restore();
       },
+      ball(g, cx, cy, rot) {
+        g.save(); g.translate(cx, cy); g.rotate(rot);
+        g.beginPath(); g.arc(0, 0, 15, 0, TAU); fillOut(g, C.hot, 2.5);
+        g.beginPath(); g.moveTo(-15, 0); g.lineTo(15, 0); g.moveTo(0, -15); g.lineTo(0, 15); g.lineWidth = 3; g.strokeStyle = C.glow; g.stroke();
+        g.restore();
+      },
+      star(g, cx, cy, t) { polyPath(g, starPts(cx, cy + Math.sin(t * 3) * 2, 14, 6)); fillOut(g, C.hot); },
+      icon(g, kind, cx, cy) { iconPath(g, kind, cx, cy); g.lineJoin = "round"; g.lineCap = "round"; g.lineWidth = 7; g.strokeStyle = C.ink; g.stroke(); g.lineWidth = 3.5; g.strokeStyle = C.white; g.stroke(); },
       particle(g, x, y, q, a) {
-        if (a < 0.15) return;
-        const s = q.size > 5 ? PX * 2 : PX;
-        px(g, x, y, s, s, q.kind === "burst" ? (q.alt ? Y : O) : q.kind === "spark" ? Y : q.kind === "trail" ? R : SM);
+        g.globalAlpha = a;
+        g.fillStyle = q.kind === "burst" ? (q.alt ? C.hot : C.glow) : q.kind === "spark" ? C.hot : q.kind === "trail" ? C.rim : C.soot;
+        g.beginPath(); g.arc(x, y, q.size * 0.6, 0, TAU); g.fill();
+        g.globalAlpha = 1;
       },
       fx: makeFx(40,
         (f, dt, sp) => { f.y -= (25 + f.s * 50) * dt; f.x -= (sp * 0.12 + 20) * dt; },
-        (g, f, t) => px(g, f.x, f.y, PX, PX, Math.sin(t * 10 + f.ph) > 0 ? Y : O)),
+        (g, f, t) => { g.globalAlpha = 0.6 + 0.4 * Math.sin(t * 10 + f.ph); g.fillStyle = Math.sin(t * 7 + f.ph) > 0 ? C.hot : C.glow; g.beginPath(); g.arc(f.x, f.y, 1.8 + f.s * 1.4, 0, TAU); g.fill(); g.globalAlpha = 1; }),
     };
   })();
 
@@ -1537,7 +1558,7 @@
       run(n) {
         const last = c.floors[c.floors.length - 1];
         if (last && !c.brk && last.top === c.f && Math.abs(last.x + last.w - c.x) < 1e-6) last.w += n;
-        else c.floors.push(c.ugOn ? { t: "f", x: c.x, w: n, top: c.f, ug: true } : { t: "f", x: c.x, w: n, top: c.f });
+        else c.floors.push(c.ugOn ? { t: "f", x: c.x, w: n, top: c.f, ug: c.ugOn } : { t: "f", x: c.x, w: n, top: c.f });
         c.brk = false;
         c.x += n;
         return c;
@@ -2503,40 +2524,41 @@
   // Every level is a fixed route: the same sections in the same order every
   // attempt, so it can be learned. Edit a route by swapping, adding or removing
   // names below. Entries are chunk names from CHUNKS, "star: <route>" (see
-  // STAR_CHUNKS), "ship", "ball" or "underground". `k` is the speed at the start
+  // STAR_CHUNKS), "ship", "ball", or a signature section
+  // (mine, foundry, shipwreck, treetops, icecave, inkwell; see SIGS). `k` is the speed at the start
   // and end of the level (1 = 330 px/s); it ramps evenly across the sections.
   const ROUTES = [
     { k: [1.0, 1.1], sections: [          // 1. Meadow Run: learn to jump, climb and use pads and orbs
       "rolling hills", "hillside", "pit hops", "orb step", "star: sky path", "crate walk",
-      "spring step", "switchbacks", "underground", "crate pyramid", "hilltop", "star: broken bridge",
+      "spring step", "switchbacks", "mine", "crate pyramid", "hilltop", "star: broken bridge",
       "rabbit hole", "spike garden", "star: secret pit", "summit dive", "block fortress",
     ] },
     { k: [1.1, 1.22], sections: [         // 2. Forge: saws, pink orbs and the first ship
-      "saw step", "chain gang", "furnace steps", "star: sky path", "pink skips", "saw pit", "ship",
-      "slag pits", "underground", "catwalk", "star: secret pit", "saw drop", "sky ladder",
-      "piston pillars", "foundry tower", "star: broken bridge", "chimney", "grinder",
+      "saw step", "chain gang", "furnace steps", "star: pink ladder", "pink skips", "saw pit",
+      "star: ship pocket", "slag pits", "foundry", "catwalk", "star: slag dive", "saw drop", "sky ladder",
+      "track ledge", "piston pillars", "foundry tower", "saw platforms", "chimney", "grinder",
     ] },
     { k: [1.2, 1.34], sections: [         // 3. Reef: falling and moving blocks, speed portals
-      "rockfall", "slider hop", "reef shelves", "star: broken bridge", "pillar bridge", "sunken bridge",
-      "ship", "gate run", "landslide", "underground", "tide bridge", "star: sky path", "coral terrace",
-      "sunken ruins", "sea cave", "star: secret pit", "crumbling causeway", "gate and rockfall", "tidal stairs",
+      "rockfall", "slider hop", "reef shelves", "star: riptide", "pillar bridge", "sunken bridge",
+      "ship", "gate run", "landslide", "shipwreck", "tide bridge", "star: sunken arch", "coral terrace",
+      "sunken ruins", "sea cave", "star: spike hop", "crumbling causeway", "gate and rockfall", "tidal stairs",
     ] },
     { k: [1.32, 1.5], sections: [         // 4. Canopy: low ceilings, green dash orbs, the ball
-      "under the branches", "dash gap", "ledge crawl", "star: secret pit", "duck and leap", "ship",
-      "canopy climb", "log pile", "underground", "duck and dive", "tunnel stairs", "treehouse",
-      "star: sky path", "ball", "root hollow", "canopy gauntlet", "hollow log", "star: broken bridge",
+      "under the branches", "dash gap", "ledge crawl", "star: root crawl", "duck and leap", "ship",
+      "canopy climb", "log pile", "treetops", "duck and dive", "tunnel stairs", "treehouse",
+      "star: vine dash", "star: ball notch", "root hollow", "canopy gauntlet", "hollow log",
       "duck jump rhythm", "mesa",
     ] },
     { k: [1.45, 1.66], sections: [        // 5. Glacier: gravity flips, blue orbs and pads
-      "skywalk", "summit flip", "star: sky path", "over the crevasse", "ship", "ice pillars",
-      "flip and land", "underground", "upside bridge", "frost saws", "ice blocks", "star: broken bridge",
-      "double flip", "ice summit", "ball", "inverted stairs", "star: secret pit", "spike floor", "flip frenzy",
+      "skywalk", "summit flip", "star: ice shaft", "over the crevasse", "ship", "ice pillars",
+      "flip and land", "icecave", "upside bridge", "frost saws", "ice blocks", "star: mirror slabs",
+      "double flip", "ice summit", "ball", "inverted stairs", "star: flip pocket", "spike floor", "flip frenzy",
     ] },
     { k: [1.6, 1.92], sections: [         // 6. The Void: everything, ending in the hardest run in the game
-      "void steps", "bridge and tunnel", "flip saw", "star: broken bridge", "tower gate", "ship",
-      "tunnel drop", "sliders and saws", "void descent", "underground", "ink fortress", "star: sky path",
+      "void steps", "bridge and tunnel", "flip saw", "star: void ladder", "tower gate", "ship",
+      "tunnel drop", "sliders and saws", "void descent", "inkwell", "ink fortress", "star: dash dive",
       "void pillars", "everything", "flip gauntlet", "ball", "orb tower", "void citadel",
-      "star: secret pit", "canopy gauntlet", "crumbling causeway", "flip frenzy", "final exam",
+      "star: ceiling gauntlet", "canopy gauntlet", "crumbling causeway", "flip frenzy", "final exam",
     ] },
   ];
   const routeK = (level, i) => { const r = ROUTES[level], n = r.sections.length; return r.k[0] + (r.k[1] - r.k[0]) * (n > 1 ? i / (n - 1) : 0); };
@@ -2609,9 +2631,181 @@
       c.up(D).run(w(4.5));
       c.allowLow = true;
     } },
+
+    // ---- Level 2, Forge ----
+    { name: "star: ship pocket", make: (k, level) => buildShip(k, level, { star: true }) },
+    { name: "star: slag dive", build(c, k, w) {
+      // jump the molten pit as normal, or drop in on purpose for the star and orb-jump out
+      c.run(3);
+      const e = c.x, pw = w(3.4);
+      c.o.push({ t: "lava", x: e, w: pw, top: c.f - 2.2 });
+      c.star(e + w(1.2), -1.5);
+      c.orb(e + w(1.9), -1.7);
+      c.gap(pw).run(w(4));
+      c.spike(c.x).run(w(3.5));
+      c.allowLow = true;
+    } },
+    { name: "star: pink ladder", build(c, k, w) {
+      // three pink orbs, each a little higher, up to a girder with the star
+      c.run(3);
+      const e = c.x, s = w(1.7);
+      c.orb(e + w(1.3), 2.9, "pink");
+      c.orb(e + w(1.3) + s, 4.1, "pink");
+      c.orb(e + w(1.3) + 2 * s, 5.3, "pink");
+      const gx = e + w(1.3) + 2 * s + w(1.4), gw = w(4);
+      c.block(gx, gw, 0.6, 4.8);
+      c.star(gx + gw - 1, 5.6);
+      c.run(gx + gw + w(4) - c.x);
+      c.spike(e + w(5.5));
+      c.allowHigh = true;
+    } },
+
+    // ---- Level 3, Reef ----
+    { name: "star: riptide", build(c, k, w) {
+      // orb up to a high reef; a fast current on it makes the long gap jumpable
+      c.run(3);
+      const e = c.x, ox = e + w(1.3), ST = 4;
+      c.orb(ox, 2.9);
+      const s1 = ox + w(1.6), w1 = w(4);
+      c.block(s1, w1, 0.6, ST - 0.6);
+      c.o.push({ t: "sp", x: s1 + 1, mult: 1.4, base: ST });
+      const s2 = s1 + w1 + w(4.2), w2 = w(4);
+      c.block(s2, w2, 0.6, ST - 0.6);
+      c.o.push({ t: "sp", x: s2 + w2 - 1, mult: 1, base: ST });
+      c.star(s2 + w2 / 2, ST + 0.2);
+      c.run(s2 + w2 + w(4) - c.x);
+      c.spike(s1 + w(2));
+      c.allowHigh = true;
+    } },
+    { name: "star: sunken arch", build(c, k, w) {
+      // the main way climbs over a stone arch; stay low and do NOT jump to slip under it for the star
+      const L = stepLen(k);
+      c.run(3);
+      const a0 = c.x + w(2), aw = w(8);
+      c.overhang(a0, aw, 1.05, 0.7);            // the arch: jump up onto it for the easy way; ~1 block of clearance underneath
+      c.star(a0 + aw / 2, 0);
+      c.run(a0 + aw + w(4) - c.x);
+      c.spike(c.x - w(1.5));
+    } },
+    { name: "star: spike hop", build(c, k, w) {
+      // one long jump clears both spikes; two short, precise hops land between them on the star
+      c.run(3);
+      const g = Math.max(2, w(2.4)), s0 = c.x + 2;
+      c.block(c.x, 1, 1);                       // a crate: jump from it to clear both spikes at once
+      c.spike(s0, 1);
+      c.star(s0 + 1 + g / 2 - 0.5, 0);
+      c.spike(s0 + 1 + g, 1);
+      c.run(2 + 1 + g + 1 + w(5));
+    } },
+
+    // ---- Level 4, Canopy ----
+    { name: "star: root crawl", build(c, k, w) {
+      // the main way hops up over a root; ducking into the crawlspace underneath gets the star
+      const L = stepLen(k);
+      c.run(3);
+      const r0 = c.x + w(1.5), rw = w(7);
+      c.overhang(r0, rw, 0.62, 1.4);            // too low to stand under, fine to duck under
+      c.star(r0 + rw / 2, -0.2);
+      c.run(r0 + rw + w(4) - c.x);
+      c.spike(c.x - w(1.5));
+    } },
+    { name: "star: vine dash", build(c, k, w) {
+      // the safe way drops into a gully and springs out; a green dash orb flies straight across it past the star
+      const D = 3;
+      c.run(3);
+      const e = c.x;
+      c.orb(e + w(0.8), 1.4, "green");
+      c.star(e + w(3.4), 1.4);
+      c.down(D).run(w(5.5));
+      c.spike(c.x - w(2.5));
+      c.pad(c.x).run(w(2.5)).up(D).run(w(4));
+      c.allowLow = true;
+    } },
+    { name: "star: ball notch", make: (k, level) => buildBall(k, level, { star: true }) },
+
+    // ---- Level 5, Glacier ----
+    { name: "star: ice shaft", build(c, k, w) {
+      // drop into the shaft: a blue pad flips you up onto the underside of an ice shelf; another flips you back
+      c.run(3);
+      const e = c.x, hw = w(2.2);
+      c.down(2).run(hw);
+      c.pad(e + 0.5, "blue", 0);
+      const shelf = e + w(0.5), sw = w(10);
+      c.o.push({ t: "b", x: shelf, w: sw, bot: 4.2, top: 5 });
+      c.star(shelf + sw / 2, 3.2);
+      c.pad(shelf + sw - w(2.5), "blue", 6.2, -1);
+      c.up(2).run(shelf + sw + w(4) - c.x);
+      c.spike(e + w(5.5));
+      c.allowLow = true; c.allowHigh = true;
+    } },
+    { name: "star: mirror slabs", build(c, k, w) {
+      // blue orbs swap you between a floor slab and a ceiling slab over a spike bed
+      c.run(3);
+      const e = c.x, sw = w(4);
+      c.orb(e + w(1.3), 1.9, "blue");
+      c.o.push({ t: "b", x: e + w(2), w: sw, bot: 4.6, top: 5.2 });
+      c.orb(e + w(2) + sw + w(0.8), 3.4, "blue");
+      c.star(e + w(2) + sw / 2, 3.5);
+      c.run(e + w(2) + sw + w(6) - c.x);
+      c.spike(e + w(4.5), 1);
+      c.allowHigh = true;
+    } },
+    { name: "star: flip pocket", build(c, k, w) {
+      // in a gravity-flip stretch, the star hangs below the ceiling: jump "down" at the right moment to grab it
+      c.run(3);
+      const x0 = c.x, x1 = x0 + w(16);
+      c.flip(x0, x1).cspike(x0 + w(5));
+      c.star(x0 + w(10), CEIL_H / B - 2.6);
+      c.cspike(x0 + w(12.5));
+      c.run(x1 - x0 + w(4.5));
+    } },
+
+    // ---- Level 6, The Void ----
+    { name: "star: void ladder", build(c, k, w) {
+      // yellow, then pink, then a blue orb that flips you onto the underside of a high ink slab
+      c.run(3);
+      const e = c.x;
+      c.orb(e + w(1.3), 2.9);
+      c.orb(e + w(3.3), 5.1, "pink");
+      const sx = e + w(4.2), sw = w(6);
+      c.o.push({ t: "b", x: sx, w: sw, bot: 7.4, top: 8 });
+      c.orb(sx - w(0.2), 6.1, "blue");
+      c.o.push({ t: "s", x: sx + w(3), base: 7.4, dir: -1 });
+      c.star(sx + sw - 1.5, 6.4);
+      c.pad(sx + sw - 1, "blue", 7.4, -1);
+      c.run(sx + sw + w(5) - c.x);
+      c.spike(e + w(6), 2);
+      c.allowHigh = true;
+    } },
+    { name: "star: dash dive", build(c, k, w) {
+      // drop into the pit for the star, then a green dash orb carries you along and a yellow orb lifts you out
+      c.run(3);
+      const e = c.x, pw = Math.round(7.4 * k);
+      c.star(e + 1.4 * k, -1.4);
+      c.orb(e + 2.1 * k, -1.6, "green");
+      c.orb(e + 6.2 * k, -1.2);                 // the way back up, just after the dash runs out
+      c.orb(e + w(1.2), 1.2, "green");          // the safe way: dash straight across at the top
+      c.gap(pw).run(w(4.5));
+      c.spike(c.x).run(w(3));
+      c.allowLow = true;
+    } },
+    { name: "star: ceiling gauntlet", build(c, k, w) {
+      // a blue orb puts you on a ceiling path lined with spikes and a saw; a blue pad brings you home
+      c.run(3);
+      const e = c.x, sx = e + w(1.8), sw = w(12), bot = 4.4;
+      c.orb(e + w(1.2), 1.9, "blue");
+      c.o.push({ t: "b", x: sx, w: sw, bot, top: bot + 0.6 });
+      c.o.push({ t: "s", x: sx + w(3.5), base: bot, dir: -1 });
+      c.o.push({ t: "saw", kind: "float", x: sx + w(7), base: c.f, dy: bot - 0.7 });
+      c.star(sx + w(9.5), bot - 1);
+      c.pad(sx + sw - w(1.5), "blue", bot, -1);
+      c.run(sx + sw + w(4) - c.x);
+      c.spike(e + w(5)).spike(e + w(10), 2);
+      c.allowHigh = true;
+    } },
   ];
   // Ship tunnel: floor, ceiling and pillar gates to weave through. Tighter in later levels.
-  function buildShip(k, level) {
+  function buildShip(k, level, opts = {}) {
     const c = builder(k), w = n => Math.max(1, Math.round(n * k));
     const T = 7, open = level >= 5 ? 2.9 : level >= 3 ? 3.3 : 3.9, secs = level >= 4 ? 11 : 9, gap = level >= 5 ? 5.5 : level >= 3 ? 6.2 : 7;
     const swing = level >= 5 ? 1.3 : level >= 3 ? 1.1 : 0.9;   // how far the gap moves from one gate to the next
@@ -2625,7 +2819,12 @@
       cen = clamp(cen + (genRand() * 2 - 1) * swing, open / 2 + 0.8, T - open / 2 - 0.8);
       const kind = i % 4 === 3 ? "saw" : i % 5 === 2 ? "spikes" : "gate";
       if (kind === "gate") { c.block(x, 1, cen - open / 2); c.o.push({ t: "b", x, w: 1, bot: c.f + cen + open / 2, top: c.f + T }); }
-      else if (kind === "saw") c.saw("float", x, cen > T / 2 ? cen - 2.2 : cen + 2.2);
+      else if (kind === "saw") {
+        const sd = cen > T / 2 ? cen - 2.2 : cen + 2.2;
+        c.saw("float", x, sd);
+        // the star hangs between the safe line and the saw: fly close to grab it
+        if (opts.star && !c.starred && i >= 3) { c.star(x - 0.5, cen + (sd - cen) * 0.5 - 0.5); c.starred = true; }
+      }
       else { c.spike(x, 2); c.cspike(x, 2); }
       x += w(gap); i++;
     }
@@ -2633,7 +2832,7 @@
     return c;
   }
   // Ball corridor: tap to swap between floor and ceiling past alternating spikes.
-  function buildBall(k, level) {
+  function buildBall(k, level, opts = {}) {
     const c = builder(k), w = n => Math.max(1, Math.round(n * k));
     const T = 4.5;
     c.run(3);
@@ -2642,57 +2841,88 @@
     c.ceil = c.f + T;
     c.run(len + w(5));
     let x = x0 + w(5), up = false;
-    while (x < x1 - w(3)) { if (up) c.cspike(x, 2); else c.spike(x, 2); up = !up; x += w(level >= 5 ? 4.5 : 5.5); }
+    let ups = 0;
+    while (x < x1 - w(3)) {
+      if (up) {
+        c.cspike(x, 2);
+        // a star on the ceiling just before a ceiling spike pair: flip up for it and back down in time
+        if (opts.star && ++ups === 2) c.star(x - w(2.4), T - 0.9);
+      } else c.spike(x, 2);
+      up = !up; x += w(level >= 5 ? 4.5 : 5.5);
+    }
     c.name = "ball corridor";
     return c;
   }
-  // Underground: step down a quarry into the earth, run a stone cavern with its
-  // own hazards (crystal spikes, falling stalactites, lava pits, crushers), then
-  // spring back up to the surface.
-  function buildUnderground(k, level) {
-    const c = builder(k), w = n => Math.max(1, Math.round(n * k)), L = stepLen(k);
-    const DEPTH = 8, CLEAR = 4.6, bottom = -DEPTH;
+  // Signature sections: one per level, each its own little world with its own
+  // way in, look, hazards and way out. `dir` down sinks below the surface, up
+  // climbs above it. `pats` are the hazard patterns mixed through the middle.
+  const SIGS = {
+    mine:      { zone: 0, dir: "down", depth: 8, clear: 4.6, entry: "stairs", exit: "springs", pats: ["spike", "pit", "fall", "crusher", "ledge"] },
+    foundry:   { zone: 1, dir: "down", depth: 8, clear: 4.6, entry: "drop", exit: "springs", pats: ["spike", "pit", "fall", "crusher", "saw"] },
+    shipwreck: { zone: 2, dir: "down", depth: 6, clear: 4.6, entry: "stairs", exit: "springs", pats: ["spike", "pit", "fall", "crusher", "cargo"] },
+    treetops:  { zone: 3, dir: "up", depth: 6, clear: 5, entry: "springs", exit: "stairs", pats: ["spike", "gap", "fall", "duck", "dash"] },
+    icecave:   { zone: 4, dir: "down", depth: 8, clear: CEIL_H / B, entry: "stairs", exit: "springs", pats: ["spike", "pit", "fall", "flip"] },
+    inkwell:   { zone: 5, dir: "down", depth: 8, clear: 4.6, entry: "drop", exit: "springs", pats: ["spike", "pit", "fall", "crusher", "saw", "flip"] },
+  };
+  const SIG_OF_ZONE = ["mine", "foundry", "shipwreck", "treetops", "icecave", "inkwell"];
+  const SIG_ALIASES = { "ice cave": "icecave", underground: null };
+  function buildSignature(k, level, id) {
+    const sig = SIGS[id], c = builder(k), w = n => Math.max(1, Math.round(n * k)), L = stepLen(k);
     c.run(3);
-    for (let i = 0; i < 4; i++) c.down(2).run(w(3));
-    const xs = c.x, ceil = bottom + CLEAR;
-    c.brk = true; c.ugOn = true;
+    // the way in
+    if (sig.dir === "up") { c.pad(c.x).run(w(2.5)).up(3).run(w(4)); c.pad(c.x).run(w(2.5)).up(3).run(w(3)); }
+    else if (sig.entry === "drop") { c.run(w(1.5)); c.down(sig.depth).run(w(2)); }
+    else for (let i = 0; i < sig.depth / 2; i++) c.down(2).run(w(3));
+    const floor = c.f, xs = c.x, ceil = floor + sig.clear;
+    c.brk = true; c.ugOn = id;
     c.run(w(3.5));
     const xEnd = xs + Math.round((level >= 3 ? 14 : 12) * 8.25 * k);
     const pats = {
-      crystals: () => c.spike(c.x, level >= 2 && genRand() < 0.5 ? 2 : 1).run(w(4.5)),
-      lava: () => { const g = w(2.6); c.lava(c.x, g); c.gap(g).run(w(3.5)); },
-      stalactite: () => c.fall(c.x, 1).run(1 + w(4.5)),
+      spike: () => c.spike(c.x, level >= 2 && genRand() < 0.5 ? 2 : 1).run(w(4.5)),
+      pit: () => { const g = w(2.6); c.lava(c.x, g); c.gap(g).run(w(3.5)); },
+      gap: () => c.gap(w(2.6)).run(w(3.5)),
+      fall: () => c.fall(c.x, 1).run(1 + w(4.5)),
       crusher: () => c.slide(c.x, "gate", 1, 2).run(1 + w(4)),
-      ledge: () => (c.f === bottom ? c.up().run(L) : c.down().run(w(3.5))),
+      ledge: () => (c.f === floor ? c.up().run(L) : c.down().run(w(3.5))),
+      saw: () => c.saw("ground", c.x).run(w(4.5)),
+      cargo: () => c.block(c.x, 2, 1).run(2 + w(4)),
+      duck: () => c.low(c.x, 3).run(3 + w(3)),
+      dash: () => { c.orb(c.x + w(1.3), 1.2, "green"); c.gap(w(6.5)).run(w(4)); },
+      flip: () => { const x0 = c.x + 1, x1 = x0 + w(14); c.run(1); c.flip(x0, x1).cspike(x0 + w(7)); c.run(x1 - x0 + w(4)); },
     };
-    const names = Object.keys(pats);
     let prev = "";
     while (c.x < xEnd - w(5)) {
       let n;
-      do n = names[Math.floor(genRand() * names.length)]; while (n === prev);
+      do n = sig.pats[Math.floor(genRand() * sig.pats.length)]; while (n === prev);
       prev = n;
       pats[n]();
     }
-    if (c.f !== bottom) c.down().run(w(3.5));
+    if (c.f !== floor) c.down().run(w(3.5));
     c.run(w(1.5));
     const xe = c.x;
     c.brk = true; c.ugOn = false;
-    // springs and steps back up to the surface
-    c.pad(c.x).run(w(2.5)).up(3).run(w(4));
-    c.pad(c.x).run(w(2.5)).up(3).run(w(6.5));
-    c.up().run(L).up().run(w(3.5));
+    // the way out
+    if (sig.dir === "up") { for (let i = 0; i < sig.depth / 2; i++) c.down(2).run(w(3)); c.run(w(2)); }
+    else {
+      let left = sig.depth;
+      while (left >= 3) { c.pad(c.x).run(w(2.5)).up(3).run(w(left - 3 >= 3 ? 4 : 6.5)); left -= 3; }
+      while (left > 0) { c.up().run(left > 1 ? L : w(3.5)); left--; }
+    }
     for (const o of c.o) {
       if (o.x < xs || o.x >= xe) continue;
-      if (o.t === "s") o.crystal = true;
-      if (o.t === "fb" || o.t === "mb") o.uceil = ceil;
+      if (o.t === "s" || o.t === "lava") o.theme = id;
+      if (o.t === "fb" || o.t === "mb") { o.uceil = ceil; o.theme = id; }
+      if (o.t === "roof") o.hidden = true;           // the section draws its own ceiling
     }
-    c.o.push({ t: "ug", x: xs, w: xe - xs, ceil, surface: 0 });
+    c.o.push({ t: "ug", x: xs, w: xe - xs, ceil, surface: 0, theme: id });
     c.allowLow = true;
-    c.name = "underground";
+    c.name = id;
     return c;
   }
-  function buildStar(k, which) {
-    const ch = STAR_CHUNKS[which ?? Math.floor(genRand() * STAR_CHUNKS.length)], c = buildChunk(ch, k);
+  const buildUnderground = (k, level) => buildSignature(k, level, SIG_OF_ZONE[level % 6]);
+  function buildStar(k, which, level = 0) {
+    const ch = STAR_CHUNKS[which ?? Math.floor(genRand() * STAR_CHUNKS.length)];
+    const c = ch.make ? ch.make(k, level) : buildChunk(ch, k);
     c.name = ch.name;
     return c;
   }
@@ -2708,8 +2938,8 @@
     const o = { t: s.t, id: nextId++, seed: (hash(x0 * 0.013 + s.x * 7.7 + hb * 3.1) * 1e9) | 0, used: false };
     const X = x0 + s.x * B, H = v => (hb + v) * B;
     switch (s.t) {
-      case "f": Object.assign(o, { x: X, w: s.w * B, top: H(s.top), bot: -4000 }); if (s.ug) o.ug = true; break;
-      case "s": Object.assign(o, { x: X, w: B, base: H(s.base), dir: s.dir }); if (s.crystal) o.crystal = true; break;
+      case "f": Object.assign(o, { x: X, w: s.w * B, top: H(s.top), bot: -4000 }); if (s.ug) o.ug = s.ug; break;
+      case "s": Object.assign(o, { x: X, w: B, base: H(s.base), dir: s.dir }); if (s.theme) o.theme = s.theme; break;
       case "b": Object.assign(o, { x: X, w: s.w * B, bot: H(s.bot), top: H(s.top) }); if (s.terrain) Object.assign(o, { terrain: true, back: H(s.back) }); break;
       case "p": Object.assign(o, { x: X, w: B, base: H(s.base), kind: s.kind || "yellow", dir: s.dir || 1 }); break;
       case "o": Object.assign(o, { x: X, w: B, cy: H(s.cy), kind: s.kind || "yellow" }); break;
@@ -2717,16 +2947,16 @@
       case "mp": Object.assign(o, { x: X, w: B, mode: s.mode, base: H(s.base), ceil: H(s.ceil), icon: s.mode }); break;
       case "sp": Object.assign(o, { x: X, w: B, mult: s.mult, base: H(0), icon: speedName(s.mult) }); break;
       case "gp": Object.assign(o, { x: X, w: B, flip: s.flip, base: H(s.base), ceil: H(s.base) + CEIL_H }); break;
-      case "roof": Object.assign(o, { x: X, w: s.w * B, ceil: H(s.ceil) }); break;
+      case "roof": Object.assign(o, { x: X, w: s.w * B, ceil: H(s.ceil) }); if (s.hidden) o.hidden = true; break;
       case "sk": Object.assign(o, { x: X, w: 1, k: s.k }); break;
-      case "ug": Object.assign(o, { x: X, w: s.w * B, ceil: H(s.ceil), surface: H(s.surface), tip: tipsSeen.underground ? null : "underground" }); break;
-      case "lava": Object.assign(o, { x: X, w: s.w * B, top: H(s.top) }); break;
+      case "ug": Object.assign(o, { x: X, w: s.w * B, ceil: H(s.ceil), surface: H(s.surface), theme: s.theme, tip: tipsSeen["ug:" + s.theme] ? null : "ug:" + s.theme }); break;
+      case "lava": Object.assign(o, { x: X, w: s.w * B, top: H(s.top), theme: s.theme || "mine" }); break;
       case "lc": Object.assign(o, { x: X, w: s.w * B, bottom: H(s.bottom) + (s.clear ? s.clear * B : LOW_CEIL), cave: !!s.clear }); break;
       case "fb": Object.assign(o, { x: X, w: s.w * B, hh: s.h, land: H(s.land), start: H(s.land) + 6 * B, bot: H(s.land) + 6 * B, vy: 0, state: "wait", timer: 0 });
         if (s.uceil !== undefined) {
           // a stalactite: hangs in plain sight under the ceiling, shakes for a long time and lands well before you get there
           const st = H(s.uceil) - s.h * B;
-          Object.assign(o, { ug: true, uceil: H(s.uceil), start: st, bot: st, shakeT: 0.7, lead: 1.1 });
+          Object.assign(o, { ug: true, uceil: H(s.uceil), theme: s.theme, start: st, bot: st, shakeT: 0.7, lead: 1.1 });
         }
         break;
       case "mb": {
@@ -2734,7 +2964,7 @@
         Object.assign(o, { x: X, w: s.w * B, hh: s.h, kind: s.kind, d0: s.settle * B * k, L: 7 * B });
         if (s.kind === "gate") { o.rest = base + 64; o.far = base; } else { o.rest = base; o.far = base + 96; }
         o.bot = o.far;
-        if (s.uceil !== undefined) { o.ug = true; o.uceil = H(s.uceil); }
+        if (s.uceil !== undefined) { o.ug = true; o.uceil = H(s.uceil); o.theme = s.theme; }
         break;
       }
       case "saw": {
@@ -2787,7 +3017,7 @@
     level: 0, levelTime: 0, attempts: 0,
     player: { x: 0, h: 0, vy: 0, rot: 0, grounded: true },
     objs: [], nextX: 0, hb: 0, portalX: null, portalH: 0, runway: null, introPending: false,
-    pending: [], pendI: 0, curK: 1, levelStartX: 0,
+    pending: [], pendI: 0, curK: 1, levelStartX: 0, section: "", sectionI: 0, runT: 0,
     dead: false, deadT: 0,
     held: false, buffer: 0, duckInput: false, ducking: false, flipped: false, ceilH: CEIL_H, surf: 0,
     envFrom: 0, envTo: 0, envT: 1, titleT: 0,
@@ -2838,6 +3068,7 @@
     S.pmode = "cube"; S.secBase = 0; S.speedMult = 1; S.planMult = 1; S.dashT = 0; S.ceilH = CEIL_H;
     S.runStars = new Set();
     S.airTop = 0; S.airFrom = 0;
+    S.runT = 0; S.section = String(ROUTES[S.level]?.sections[0] || ""); S.sectionI = 0;
     cps.length = 0;
     S.attempts++;
   }
@@ -2859,6 +3090,7 @@
     if (isTouch) showTouchHint(3500);
   }
   function quitToTitle() {
+    if (S.mode === "play" && !S.dead && S.runT > 1) logAttempt({ cause: "quit", sec: S.section || "" });
     S.mode = "title";
     S.paused = false;
     S.objs = titleFloor();
@@ -2875,6 +3107,8 @@
   }
   function levelUp() {
     const done = S.level, got = [0, 1, 2].map(i => S.runStars.has(i));
+    logAttempt({ finished: true, cause: "", sec: "" });
+    S.runT = 0;
     if (!practice) { commitStars(done); recordBest(100); }
     el("bannerStars").innerHTML = practice ? `Level ${done + 1} complete (practice: nothing saved)` : `Level ${done + 1} complete ${starsHTML(got)}`;
     cps.length = 0;
@@ -2895,6 +3129,51 @@
     audio.levelUp();
     showBanner();
   }
+  // ---- Attempt stats -------------------------------------------------------
+  // Each attempt (a crash, a finished level, a quit) is recorded for the
+  // artifact's owner in the artifact's database, where Claude can read it.
+  // Attempts are batched into one document per play session.
+  const statsLog = { db: null, owner: false, ready: false, doc: null, rows: [], dirty: false, writing: false, timer: 0 };
+  (async () => {
+    try {
+      for (let i = 0; i < 20 && !window.claude?.use; i++) await new Promise(r => setTimeout(r, 250));
+      const use = window.claude?.use?.bind(window.claude);
+      if (!use) return;
+      const [db, user] = await Promise.all([use("db"), use("user")]);
+      if (!db || !user || !(await user.isOwner())) return;
+      const stamp = new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14);
+      statsLog.db = db; statsLog.owner = true;
+      statsLog.doc = db.doc(`stats/s${stamp}${Math.floor(Math.random() * 1e4)}`);
+      statsLog.ready = true;
+      if (statsLog.rows.length) scheduleStatsFlush();
+    } catch { /* stats are optional */ }
+  })();
+  function logAttempt({ cause, sec, finished = false }) {
+    if (S.sim) return;
+    const row = {
+      at: new Date().toISOString(), level: S.level + 1, practice: practice, finished,
+      pct: finished ? 100 : progressPct(), section: sec, sectionIndex: S.sectionI, cause,
+      secs: +S.runT.toFixed(1), stars: [...S.runStars].length, mode: S.pmode, attempt: S.attempts,
+    };
+    statsLog.rows.push(row);
+    if (statsLog.rows.length > 800) statsLog.rows.splice(0, statsLog.rows.length - 800);   // stay well under a document's size limit
+    scheduleStatsFlush();
+  }
+  function scheduleStatsFlush() {
+    if (!statsLog.ready) return;
+    statsLog.dirty = true;
+    if (!statsLog.timer) statsLog.timer = setTimeout(() => { statsLog.timer = 0; flushStats(); }, 4000);   // at most one write every few seconds
+  }
+  async function flushStats() {
+    if (!statsLog.ready || !statsLog.dirty || statsLog.writing) return;
+    statsLog.writing = true; statsLog.dirty = false;
+    try { await statsLog.doc.set({ started: statsLog.rows[0]?.at || "", updated: new Date().toISOString(), attempts: statsLog.rows }); }
+    catch (e) { if (e && (e.code === "unavailable")) statsLog.dirty = true; else if (e && e.code !== "resource_exhausted") statsLog.ready = false; }
+    statsLog.writing = false;
+    if (statsLog.dirty) scheduleStatsFlush();
+  }
+  document.addEventListener("visibilitychange", () => { if (document.hidden) flushStats(); });
+
   // Beating the Void: the end of the game
   function finishGame() {
     S.portalX = null;
@@ -2909,11 +3188,12 @@
     clearTimeout(bannerTimer);
     bannerTimer = setTimeout(() => { b.hidden = true; b.classList.remove("show"); if (S.mode === "play") quitToTitle(); }, 3200);
   }
-  function die() {
+  function die(cause = "unknown", obj = null) {
     if (S.dead) return;
     S.dead = true;
     S.deadT = 0;
     if (S.sim) return;
+    logAttempt({ cause, sec: (obj && obj.chunk) || S.section || "" });
     S.shake = reducedMotion ? 0 : 14;
     S.flash = 0.5;
     const p = S.player, ph = playerH();
@@ -2956,7 +3236,6 @@
     flip: "<b>Gravity flip!</b>You'll run on the ceiling until the next portal. Jumping still works, just upside down.",
     ship: "<b>Ship!</b>Hold to fly up, let go to sink. Touching anything crashes, even the floor.",
     ball: "<b>Ball!</b>Tap to swap between the floor and the ceiling.",
-    underground: "<b>Underground!</b>Watch for crystal spikes, falling stalactites, crushers and lava.",
   };
   let tipTimer = 0;
   function showToast(html, ms) {
@@ -2970,7 +3249,7 @@
     if (tipsSeen[kind]) return;
     tipsSeen[kind] = true;
     store.set("beatline-tips", tipsSeen);
-    showToast(TIPS[kind], 4200);
+    showToast(TIPS[kind] || (kind.startsWith("ug:") ? ugTheme(kind.slice(3)).tip : ""), 4200);
     if (kind === "duck" && isTouch) showTouchHint(4200);
   }
   let hintTimer = 0;
@@ -3005,6 +3284,7 @@
     S.runStars = new Set(cp.runStars);
     camH = cp.camH; camSurf = cp.camSurf; zoom = cp.zoom;
     S.dead = false; S.deadT = 0; S.buffer = 0;
+    S.runT = 0;
     S.attempts++;
     audio.resync();
   }
@@ -3032,10 +3312,11 @@
     if (name === "ship") c = buildShip(kBase, level);
     else if (name === "ball") c = buildBall(kBase, level);
     else if (name === "underground") c = buildUnderground(kBase, level);
+    else if (SIGS[name] || SIG_ALIASES[name]) c = buildSignature(kBase, level, SIGS[name] ? name : SIG_ALIASES[name]);
     else if (name.startsWith("star:")) {
       const i = STAR_CHUNKS.findIndex(ch => ch.name === name);
       if (i < 0) throw new Error(`Unknown star route "${name}"`);
-      c = buildStar(kBase, i);
+      c = buildStar(kBase, i, level);
     } else {
       const ch = CHUNKS.find(ch => ch.name === name);
       if (!ch) throw new Error(`Unknown section "${name}"`);
@@ -3056,8 +3337,11 @@
     const put = (s, k) => { const o = place(s, x, k, hb); list.push(o); return o; };
     route.sections.forEach((entry, i) => {
       const kBase = routeK(level, i), c = buildSection(entry, level, kBase), k = c.k;
-      put({ t: "sk", x: -1, k: kBase }, k);                         // the speed for this section
+      const sk = put({ t: "sk", x: -1, k: kBase }, k);              // the speed (and name) of this section
+      sk.sec = c.name || (typeof entry === "string" ? entry : entry.name); sk.si = i;
       if (Math.abs(c.mult - planMult) > 0.01) { put({ t: "sp", x: -1, mult: c.mult }, k); planMult = c.mult; }
+      const ownSp = c.o.filter(s => s.t === "sp");
+      if (ownSp.length) planMult = ownSp[ownSp.length - 1].mult;
       for (const s of [...c.floors, ...c.o]) {
         const o = put(s, k);
         o.chunk = c.name;
@@ -3129,7 +3413,7 @@
     for (const o of S.objs) {
       const d = o.x - p.x;
       if (d > 30 * B) break;
-      if (o.t === "sk" && !o.used && p.x + P / 2 >= o.x + B / 2) { o.used = true; S.curK = o.k; continue; }
+      if (o.t === "sk" && !o.used && p.x + P / 2 >= o.x + B / 2) { o.used = true; S.curK = o.k; S.section = o.sec; S.sectionI = o.si; continue; }
       if ((o.t === "mp" || o.t === "sp") && !o.used && p.x + P / 2 >= o.x + B / 2) {
         o.used = true;
         if (o.t === "sp") S.speedMult = o.mult;
@@ -3187,34 +3471,34 @@
         case "f": case "b": case "mb": case "fb": {
           const [bot, top] = span(o);
           if (p.h < top && p.h + ph > bot) {
-            if (mode === "ship") return die();
+            if (mode === "ship") return die("ship crash", o);
             if (!S.flipped && h0 >= top - 10 && p.vy <= 0) { p.h = top; p.vy = 0; grounded = true; S.surf = top; }
             else if (S.flipped && h0 + ph <= bot + 10 && p.vy >= 0) { p.h = bot - ph; p.vy = 0; grounded = true; }
-            else return die();
+            else return die(o.t === "f" ? "ran into a wall" : o.t === "fb" ? (o.theme ? ugTheme(o.theme).names.fall : "falling block") : o.t === "mb" ? (o.theme ? ugTheme(o.theme).names.crusher : "sliding block") : o.terrain ? "cave wall" : "ran into a block", o);
           }
           break;
         }
         case "roof":
-          if (mode === "ship" && p.h + ph > o.ceil) return die();
+          if (mode === "ship" && p.h + ph > o.ceil) return die("ship hit the ceiling", o);
           break;
         case "lava":
-          if (p.x + P - 4 > o.x && p.x + 4 < o.x + o.w && p.h < o.top) return die();
+          if (p.x + P - 4 > o.x && p.x + 4 < o.x + o.w && p.h < o.top) return die(ugTheme(o.theme).names.pit, o);
           break;
         case "s": {
           const cx = o.x + B / 2;
           if (p.x + P - 4 > cx - 8 && p.x + 4 < cx + 8) {
             const lo = o.dir > 0 ? o.base : o.base - 26, hi = o.dir > 0 ? o.base + 26 : o.base;
-            if (p.h + 4 < hi && p.h + ph - 4 > lo) return die();
+            if (p.h + 4 < hi && p.h + ph - 4 > lo) return die(o.theme ? ugTheme(o.theme).names.spike : o.dir < 0 ? "ceiling spike" : "spike", o);
           }
           break;
         }
         case "saw": {
           const nx = clamp(o.cx, p.x + 3, p.x + P - 3), ny = clamp(o.ch, p.h + 3, p.h + ph - 3), rr = o.r * 0.8;
-          if ((nx - o.cx) ** 2 + (ny - o.ch) ** 2 < rr * rr) return die();
+          if ((nx - o.cx) ** 2 + (ny - o.ch) ** 2 < rr * rr) return die("saw", o);
           break;
         }
         case "lc":
-          if (p.x + P - 3 > o.x && p.x + 3 < o.x + o.w && p.h + ph - 1 > o.bottom) return die();
+          if (p.x + P - 3 > o.x && p.x + 3 < o.x + o.w && p.h + ph - 1 > o.bottom) return die("low ceiling (no duck)", o);
           break;
         case "p": {
           if (o.used || mode === "ship" || !(p.x + P > o.x + 6 && p.x < o.x + B - 6)) break;
@@ -3254,7 +3538,7 @@
           break;
       }
     }
-    if (p.h < S.killH || p.h > KILL_TOP) return die();
+    if (p.h < S.killH || p.h > KILL_TOP) return die(p.h < S.killH ? "fell into a pit" : "flew off the top");
     p.grounded = grounded;
     if (!grounded) return;
     if (mode === "cube" && (S.held || S.buffer > 0)) { p.vy = (S.flipped ? -1 : 1) * JUMP_V; p.grounded = false; S.buffer = 0; }
@@ -3318,15 +3602,15 @@
     for (const o of S.objs) {
       if (o.t !== "f") continue;
       const last = floors[floors.length - 1];
-      if (last && last.top === o.top && !!last.ug === !!o.ug && Math.abs(last.x + last.w - o.x) < 1) last.w = o.x + o.w - last.x;
-      else floors.push({ x: o.x, w: o.w, top: o.top, ug: !!o.ug });
+      if (last && last.top === o.top && (last.ug || "") === (o.ug || "") && Math.abs(last.x + last.w - o.x) < 1) last.w = o.x + o.w - last.x;
+      else floors.push({ x: o.x, w: o.w, top: o.top, ug: o.ug || "" });
     }
     const sn = v => (st.pixel ? Math.round(v / PX) * PX : v);
     for (const f of floors) {
       const x0 = f.x - camX, x1 = x0 + f.w;
       if (x1 < vL - 40 || x0 > vR + 40) continue;
       const cx0 = sn(Math.max(x0, vL - 40)), cx1 = sn(Math.min(x1, vR + 40));
-      if (f.ug) { stoneGround(g, cx0 - 1, cx1 + 1, GROUND - f.top, wBot); continue; }
+      if (f.ug) { themeGround(g, ugTheme(f.ug), cx0 - 1, cx1 + 1, GROUND - f.top, wBot); continue; }
       g.save();
       g.beginPath(); g.rect(cx0 - 0.5, wTop - 60, cx1 - cx0 + 1, wBot - wTop + 120); g.clip();
       g.translate(0, -f.top);
@@ -3340,60 +3624,138 @@
       if (x1 < vL - 40 || x0 > vR + 40) continue;
       const touchPrev = prev && Math.abs(prev.x + prev.w - f.x) < 1;
       const touchNext = next && Math.abs(f.x + f.w - next.x) < 1;
-      const side = f.ug ? stoneSide : (g2, a, b, c2) => st.side(g2, a, b, c2);
+      const side = f.ug ? (g2, a, b, c2) => themeSide(g2, ugTheme(f.ug), a, b, c2) : (g2, a, b, c2) => st.side(g2, a, b, c2);
       if (!touchPrev) side(g, x0, y, wBot);
       else if (prev.top < f.top) side(g, x0, y, GROUND - prev.top);
       if (!touchNext) side(g, x1, y, wBot);
       else if (next.top < f.top) side(g, x1, y, GROUND - next.top);
     }
   }
-  // ---- Underground art (shared by every zone) ------------------------------
-  const STONE = { base: "#6d717b", dark: "#4d515b", light: "#8d929c", rim: "#a3a8b1", back: "#24262d", back2: "#2e3139", ink: "#1a1b20" };
+  // ---- Signature-section art --------------------------------------------
+  // Each signature section has its own palette, wall texture, lights and
+  // hazard drawings, so no two look alike.
+  const UG = {
+    mine: { tile: "stone", lamp: "lantern", spike: "crystal", fall: "stalactite", pit: "lava",
+      col: { base: "#6d717b", dark: "#4d515b", light: "#8d929c", back: "#24262d", back2: "#2e3139", rim: "#a3a8b1", ink: "#1a1b20" },
+      names: { spike: "crystal spike", fall: "stalactite", pit: "lava", crusher: "crusher" },
+      tip: "<b>The old mine!</b>Crystal spikes, falling stalactites, crushers and lava. Watch the red markers." },
+    foundry: { tile: "plates", lamp: "furnace", spike: "hot", fall: "slag", pit: "molten",
+      col: { base: "#5a4a42", dark: "#3b2e29", light: "#7d6a5f", back: "#1f1512", back2: "#2c1e19", rim: "#ff9a2e", ink: "#140a07" },
+      names: { spike: "hot spike", fall: "slag drip", pit: "molten metal", crusher: "piston" },
+      tip: "<b>The foundry pit!</b>Molten metal, dripping slag and pistons. Steam vents throw you back out." },
+    shipwreck: { tile: "planks", lamp: "porthole", spike: "urchin", fall: "crate", pit: "water",
+      col: { base: "#7a5a3a", dark: "#5a3f27", light: "#9a7650", back: "#15303d", back2: "#1c3d4d", rim: "#b08a5e", ink: "#1d140c" },
+      names: { spike: "sea urchin", fall: "falling crate", pit: "flooded hole", crusher: "anchor" },
+      tip: "<b>A shipwreck!</b>Sea urchins, falling cargo and swinging anchors below deck." },
+    treetops: { tile: "leaves", lamp: "fireflies", spike: "thorn", fall: "coconut", pit: null, up: true,
+      col: { base: "#3f8a3c", dark: "#2b6a2e", light: "#64b04d", back: "#6fae6a", back2: "#5d9b59", rim: "#8a5a2b", ink: "#1f2a14" },
+      names: { spike: "thorns", fall: "coconut", pit: "fell out of the trees", crusher: "log" },
+      tip: "<b>Into the treetops!</b>Run the branches, duck the low boughs, dash the gaps and watch for coconuts." },
+    icecave: { tile: "ice", lamp: "aurora", spike: "ice", fall: "icicle", pit: "icewater",
+      col: { base: "#9fd3f2", dark: "#6fb0da", light: "#d8f1ff", back: "#16304a", back2: "#1d3d5c", rim: "#e8f7ff", ink: "#1f3a5c" },
+      names: { spike: "ice shard", fall: "icicle", pit: "freezing water", crusher: "ice block" },
+      tip: "<b>The ice cave!</b>It is tall enough to run on the ceiling. Icicles fall where the red markers show." },
+    inkwell: { tile: "ink", lamp: "candle", spike: "inkblot", fall: "inkdrop", pit: "ink",
+      col: { base: "#1c1c1c", dark: "#0e0e0e", light: "#343434", back: "#0b0b0b", back2: "#161616", rim: "#f2eee4", ink: "#000000" },
+      names: { spike: "ink blot", fall: "ink drop", pit: "ink pool", crusher: "falling book" },
+      tip: "<b>The inkwell!</b>Everything here is drawn in ink. Blots, drips and pools will all end you." },
+  };
+  const ugTheme = id => UG[id] || UG.mine;
   const ORES = [["#1e1e22", "#3a3a40"], ["#d9a878", "#8a5a34"], ["#ffd23f", "#b0800a"], ["#5ee9ff", "#1f8ea3"], ["#45dd86", "#1c7a45"], ["#e04545", "#7a1c1c"]];
-  // Stone with patches and ore clusters, painted once into a repeating tile
-  // (drawing hundreds of little shapes every frame was far too slow).
-  // Tiles are painted at screen resolution (RES device pixels per world pixel), so
-  // they can be copied without smoothing and still look sharp.
+  // Wall textures, painted once into repeating tiles at screen resolution
+  // (RES device pixels per world pixel) and copied, which is cheap to draw.
   const STONE_TILE = 408;
-  let stoneTiles = {}, lampGlow = null, tileRes = 0;
+  let stoneTiles = {}, lampGlows = {}, tileRes = 0;
   function artRes() {
     const r = Math.max(1, Math.min(4, Math.round(scale * dpr)));
-    if (r !== tileRes) { tileRes = r; stoneTiles = {}; lampGlow = null; }
+    if (r !== tileRes) { tileRes = r; stoneTiles = {}; lampGlows = {}; }
     return r;
   }
-  function stoneTile(dim) {
-    const R = artRes();
-    if (stoneTiles[dim]) return stoneTiles[dim];
-    const T = STONE_TILE, cv = document.createElement("canvas"); cv.width = cv.height = T * R;
-    const g = cv.getContext("2d"), cs = 34, n = T / cs;
-    g.scale(R, R);
-    const rnd = rng(dim ? 977 : 331);
-    g.fillStyle = dim ? STONE.back : STONE.base; g.fillRect(0, 0, T, T);
-    for (let ci = 0; ci < n; ci++) for (let ri = 0; ri < n; ri++) {
-      const h = rnd(), cx = ci * cs + (rnd() - 0.5) * 10, cy = ri * cs + (rnd() - 0.5) * 10;
-      if (h < 0.34) {                                  // darker or lighter patch of rock
-        g.fillStyle = dim ? STONE.back2 : h < 0.17 ? STONE.dark : STONE.light;
-        g.beginPath(); g.moveTo(cx + 4, cy + 6); g.lineTo(cx + 20 + h * 20, cy + 3); g.lineTo(cx + 26, cy + 18); g.lineTo(cx + 8, cy + 22); g.closePath(); g.fill();
-      } else if (h > (dim ? 0.97 : 0.93)) {             // an ore cluster (kept rare)
-        const [col, edge] = ORES[Math.floor(rnd() * ORES.length)];
-        g.globalAlpha = dim ? 0.45 : 1;
-        for (let j = 0; j < 4; j++) {
-          const ox = cx + 8 + rnd() * 18, oy = cy + 8 + rnd() * 18, r = 3 + rnd() * 2;
-          g.beginPath(); g.moveTo(ox, oy - r); g.lineTo(ox + r, oy); g.lineTo(ox, oy + r); g.lineTo(ox - r, oy); g.closePath();
-          g.fillStyle = col; g.fill(); g.lineWidth = 1.2; g.strokeStyle = edge; g.stroke();
+  const TILE_PAINT = {
+    stone(g, T, rnd, dim, c) {
+      for (let ci = 0; ci < T / 34; ci++) for (let ri = 0; ri < T / 34; ri++) {
+        const h = rnd(), cx = ci * 34 + (rnd() - 0.5) * 10, cy = ri * 34 + (rnd() - 0.5) * 10;
+        if (h < 0.34) { g.fillStyle = dim ? c.back2 : h < 0.17 ? c.dark : c.light; g.beginPath(); g.moveTo(cx + 4, cy + 6); g.lineTo(cx + 20 + h * 20, cy + 3); g.lineTo(cx + 26, cy + 18); g.lineTo(cx + 8, cy + 22); g.closePath(); g.fill(); }
+        else if (h > (dim ? 0.97 : 0.93)) {
+          const [col, edge] = ORES[Math.floor(rnd() * ORES.length)];
+          g.globalAlpha = dim ? 0.45 : 1;
+          for (let j = 0; j < 4; j++) { const ox = cx + 8 + rnd() * 18, oy = cy + 8 + rnd() * 18, r = 3 + rnd() * 2; g.beginPath(); g.moveTo(ox, oy - r); g.lineTo(ox + r, oy); g.lineTo(ox, oy + r); g.lineTo(ox - r, oy); g.closePath(); g.fillStyle = col; g.fill(); g.lineWidth = 1.2; g.strokeStyle = edge; g.stroke(); }
+          g.globalAlpha = 1;
         }
-        g.globalAlpha = 1;
       }
-    }
-    return (stoneTiles[dim] = cv);
+    },
+    plates(g, T, rnd, dim, c) {
+      const P = 68;
+      for (let x = 0; x < T; x += P) for (let y = 0; y < T; y += P) {
+        g.fillStyle = dim ? (rnd() < 0.5 ? c.back : c.back2) : (rnd() < 0.3 ? c.dark : rnd() < 0.5 ? c.light : c.base);
+        g.fillRect(x + 2, y + 2, P - 4, P - 4);
+        if (!dim) { g.fillStyle = "rgba(255,255,255,0.08)"; g.fillRect(x + 4, y + 4, P - 8, 5); }
+        g.fillStyle = dim ? "#3a2a24" : "#9c8676";
+        for (const [dx, dy] of [[8, 8], [P - 8, 8], [8, P - 8], [P - 8, P - 8]]) { g.beginPath(); g.arc(x + dx, y + dy, 2.5, 0, TAU); g.fill(); }
+        if (!dim && rnd() < 0.12) { g.fillStyle = "#1a0e0a"; g.fillRect(x + 16, y + 20, P - 32, P - 40); g.fillStyle = "#ff7a1f"; for (let k = 0; k < 4; k++) g.fillRect(x + 18, y + 23 + k * 6, P - 36, 3); }
+      }
+      if (dim) { g.strokeStyle = "#3b2e29"; g.lineWidth = 9; g.beginPath(); for (let y = 40; y < T; y += 136) { g.moveTo(0, y); g.lineTo(T, y); } g.stroke(); }
+      g.strokeStyle = c.ink; g.lineWidth = 3; g.beginPath(); for (let x = 0; x <= T; x += P) { g.moveTo(x, 0); g.lineTo(x, T); } for (let y = 0; y <= T; y += P) { g.moveTo(0, y); g.lineTo(T, y); } g.stroke();
+    },
+    planks(g, T, rnd, dim, c) {
+      const H = 24;
+      for (let y = 0; y < T; y += H) {
+        let x = -rnd() * 120;
+        while (x < T) {
+          const w = 90 + rnd() * 90, tone = rnd();
+          g.fillStyle = dim ? (tone < 0.5 ? c.back : c.back2) : tone < 0.3 ? c.dark : tone < 0.7 ? c.base : c.light;
+          g.fillRect(x, y, w, H);
+          g.strokeStyle = dim ? "rgba(0,0,0,0.35)" : c.ink; g.lineWidth = 2; g.strokeRect(x, y, w, H);
+          g.strokeStyle = dim ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.18)"; g.lineWidth = 1.2; g.beginPath(); g.moveTo(x + 6, y + H * 0.45); g.bezierCurveTo(x + w * 0.3, y + H * 0.2, x + w * 0.6, y + H * 0.7, x + w - 6, y + H * 0.5); g.stroke();
+          if (!dim) { g.fillStyle = c.ink; g.beginPath(); g.arc(x + 5, y + H / 2, 1.6, 0, TAU); g.arc(x + w - 5, y + H / 2, 1.6, 0, TAU); g.fill(); }
+          x += w;
+        }
+      }
+    },
+    leaves(g, T, rnd, dim, c) {
+      const shades = dim ? [c.back, c.back2, "#7cbf72"] : [c.dark, c.base, c.light];
+      for (let i = 0; i < (dim ? 140 : 260); i++) {
+        const x = rnd() * T, y = rnd() * T, r = 8 + rnd() * 14, a = rnd() * TAU;
+        g.fillStyle = shades[Math.floor(rnd() * 3)];
+        for (const [dx, dy] of [[0, 0], [T, 0], [-T, 0], [0, T], [0, -T]]) { g.beginPath(); g.ellipse(x + dx, y + dy, r, r * 0.55, a, 0, TAU); g.fill(); }
+      }
+      if (dim) { g.strokeStyle = "#3f7a3a"; g.lineWidth = 2; for (let i = 0; i < 6; i++) { const x = rnd() * T; g.beginPath(); g.moveTo(x, 0); g.bezierCurveTo(x + 20, T * 0.3, x - 20, T * 0.6, x, T); g.stroke(); } }
+    },
+    ice(g, T, rnd, dim, c) {
+      for (let i = 0; i < 40; i++) { g.fillStyle = dim ? (rnd() < 0.5 ? c.back2 : "#244a6e") : (rnd() < 0.5 ? c.light : c.dark); g.globalAlpha = 0.5; const x = rnd() * T, y = rnd() * T; g.beginPath(); g.moveTo(x, y); g.lineTo(x + 30 + rnd() * 30, y + rnd() * 20); g.lineTo(x + rnd() * 30, y + 30 + rnd() * 20); g.closePath(); g.fill(); }
+      g.globalAlpha = 1;
+      g.strokeStyle = dim ? "rgba(160,210,255,0.25)" : "rgba(255,255,255,0.8)"; g.lineWidth = 1.5;
+      for (let i = 0; i < 14; i++) { let x = rnd() * T, y = rnd() * T; g.beginPath(); g.moveTo(x, y); for (let j = 0; j < 4; j++) { x += (rnd() - 0.5) * 50; y += rnd() * 30; g.lineTo(x, y); } g.stroke(); }
+      g.strokeStyle = dim ? "rgba(160,210,255,0.3)" : "rgba(40,100,160,0.5)";
+      for (let i = 0; i < 12; i++) { g.beginPath(); g.arc(rnd() * T, rnd() * T, 2 + rnd() * 4, 0, TAU); g.stroke(); }
+    },
+    ink(g, T, rnd, dim, c) {
+      g.strokeStyle = dim ? "rgba(242,238,228,0.07)" : "rgba(242,238,228,0.22)"; g.lineWidth = 1.2;
+      for (let i = 0; i < (dim ? 24 : 40); i++) {
+        let x = rnd() * T, y = rnd() * T;
+        g.beginPath(); g.moveTo(x, y);
+        for (let j = 0; j < 6; j++) { const nx = x + (rnd() - 0.5) * 60, ny = y + (rnd() - 0.5) * 60; g.quadraticCurveTo(x + (rnd() - 0.5) * 40, y + (rnd() - 0.5) * 40, nx, ny); x = nx; y = ny; }
+        g.stroke();
+      }
+      if (!dim) { g.fillStyle = "rgba(242,238,228,0.12)"; for (let i = 0; i < 30; i++) { g.beginPath(); g.arc(rnd() * T, rnd() * T, 1 + rnd() * 2, 0, TAU); g.fill(); } }
+    },
+  };
+  function themeTile(th, dim) {
+    const R = artRes(), key = th.tile + (dim ? ":d" : ":b");
+    if (stoneTiles[key]) return stoneTiles[key];
+    const T = STONE_TILE, cv = document.createElement("canvas"); cv.width = cv.height = T * R;
+    const g = cv.getContext("2d");
+    g.scale(R, R);
+    g.fillStyle = dim ? th.col.back : th.col.base; g.fillRect(0, 0, T, T);
+    TILE_PAINT[th.tile](g, T, rng(dim ? 977 : 331), dim, th.col);
+    return (stoneTiles[key] = cv);
   }
-  // Copies the stone tile over x0..x1 by y0..y1, anchored to the world so it
-  // scrolls with the ground (plain image copies are much cheaper than a pattern fill).
-  function stoneFill(g, x0, x1, y0, y1, dim) {
+  // Copies a theme's wall tile over x0..x1 by y0..y1, anchored to the world.
+  function themeFill(g, th, x0, x1, y0, y1, dim) {
     x0 = Math.max(x0, vL - 10); x1 = Math.min(x1, vR + 10);
     y0 = Math.max(y0, wTop - 10); y1 = Math.min(y1, wBot + 10);
     if (y1 <= y0 || x1 <= x0) return;
-    const T = STONE_TILE, tile = stoneTile(dim), R = tileRes;
+    const T = STONE_TILE, tile = themeTile(th, dim), R = tileRes;
     const tx0 = Math.floor((camX + x0) / T) * T - camX;
     g.imageSmoothingEnabled = false;
     for (let tx = tx0; tx < x1; tx += T) for (let ty = Math.floor(y0 / T) * T; ty < y1; ty += T) {
@@ -3402,92 +3764,212 @@
     }
     g.imageSmoothingEnabled = true;
   }
-  // A pre-drawn lantern glow
-  function lampSprite() {
+  // A pre-drawn soft glow of the given colour ("r,g,b")
+  function glowSprite(rgb) {
     const R = artRes();
-    if (lampGlow) return lampGlow;
+    if (lampGlows[rgb]) return lampGlows[rgb];
     const cv = document.createElement("canvas"); cv.width = cv.height = 140 * R;
     const g = cv.getContext("2d"), grd = g.createRadialGradient(70 * R, 70 * R, 2, 70 * R, 70 * R, 70 * R);
-    grd.addColorStop(0, "rgba(255,190,90,0.35)"); grd.addColorStop(1, "rgba(255,190,90,0)");
+    grd.addColorStop(0, `rgba(${rgb},0.38)`); grd.addColorStop(1, `rgba(${rgb},0)`);
     g.fillStyle = grd; g.fillRect(0, 0, 140 * R, 140 * R);
-    return (lampGlow = cv);
+    return (lampGlows[rgb] = cv);
   }
-  // Stone floor surface for the cavern
-  function stoneGround(g, x0, x1, y, bottom) {
-    stoneFill(g, x0, x1, y, bottom, false);
-    g.fillStyle = STONE.rim; g.fillRect(x0, y, x1 - x0, 5);
-    g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.lineWidth = 3; g.strokeStyle = STONE.ink; g.stroke();
-    const s = 26, i0 = Math.floor((camX + x0) / s) - 1, i1 = Math.ceil((camX + x1) / s) + 1;   // gravel along the top
-    g.fillStyle = STONE.dark;
-    for (let i = i0; i < i1; i++) { if (hash(i * 3.7) < 0.5) continue; const gx = i * s - camX + hash(i) * 14; if (gx > x0 && gx < x1) { g.beginPath(); g.ellipse(gx, y + 11, 3, 2, 0, 0, TAU); g.fill(); } }
+  function drawGlow(g, rgb, cx, cy, size) { g.imageSmoothingEnabled = false; g.drawImage(glowSprite(rgb), cx - size / 2, cy - size / 2, size, size); g.imageSmoothingEnabled = true; }
+  // Floors inside a signature section
+  function themeGround(g, th, x0, x1, y, bottom) {
+    const c = th.col;
+    if (th.up) {                                   // treetops: a thick branch over the drop
+      const bh = 30;
+      g.fillStyle = "#7a5230"; g.fillRect(x0, y, x1 - x0, bh);
+      g.strokeStyle = "#5a3a1e"; g.lineWidth = 2; g.beginPath();
+      for (let x = Math.floor((camX + x0) / 30) * 30 - camX; x < x1; x += 30) { g.moveTo(Math.max(x, x0), y + 10 + ((x + camX) % 60 ? 4 : 0)); g.lineTo(Math.min(x + 22, x1), y + 12); }
+      g.stroke();
+      g.fillStyle = "#4f9a3f"; g.fillRect(x0, y, x1 - x0, 6);
+      g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.moveTo(x0, y + bh); g.lineTo(x1, y + bh); g.lineWidth = 3; g.strokeStyle = c.ink; g.stroke();
+      return;
+    }
+    themeFill(g, th, x0, x1, y, bottom, false);
+    g.fillStyle = c.rim; g.fillRect(x0, y, x1 - x0, 5);
+    g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.lineWidth = 3; g.strokeStyle = c.ink; g.stroke();
   }
-  function stoneSide(g, x, y0, y1) { g.beginPath(); g.moveTo(x, y0); g.lineTo(x, Math.min(y1, wBot)); g.lineWidth = 3; g.strokeStyle = STONE.ink; g.stroke(); }
-  // The cavern: dark rock behind, solid rock overhead with the zone's surface on top
+  function themeSide(g, th, x, y0, y1) {
+    g.beginPath(); g.moveTo(x, y0); g.lineTo(x, th.up ? y0 + 30 : Math.min(y1, wBot)); g.lineWidth = 3; g.strokeStyle = th.col.ink; g.stroke();
+  }
+  // The section's backdrop, overhead mass, lights and edges
   function drawUnderground(g, st, x, o, t) {
-    const yc = GROUND - o.ceil, ys = GROUND - o.surface;
-    stoneFill(g, x, x + o.w, yc, wBot, true);
-    // hanging lanterns every so often, for a little warm light
+    const th = ugTheme(o.theme), c = th.col, yc = GROUND - o.ceil, ys = GROUND - o.surface;
+    if (th.up) {
+      themeFill(g, th, x, x + o.w, wTop, wBot, true);             // sky seen through the leaves
+      themeFill(g, th, x, x + o.w, wTop, yc, false);              // the leaf canopy overhead
+      g.beginPath(); g.moveTo(x, yc);
+      for (let px = x; px <= x + o.w; px += 14) g.lineTo(px, yc + 6 + Math.sin((px + camX) * 0.09) * 6);
+      g.lineTo(x + o.w, yc); g.closePath(); g.fillStyle = c.dark; g.fill();
+    } else {
+      themeFill(g, th, x, x + o.w, yc, wBot, true);
+      themeFill(g, th, x, x + o.w, ys + 30, yc, false);
+      g.save(); g.beginPath(); g.rect(x, ys - 40, o.w, 72); g.clip();
+      g.translate(0, -o.surface); st.ground(g, x - 1, x + o.w + 1, GROUND + 34, t); g.restore();
+      g.beginPath(); g.moveTo(x, yc);
+      for (let px = x + 10; px < x + o.w - 6; px += 12) g.lineTo(px, yc + 3 + hash(Math.round((px + camX) / 12) * 1.3) * 8);
+      g.lineTo(x + o.w, yc); g.closePath(); g.fillStyle = c.dark; g.fill();
+      g.beginPath(); g.moveTo(x, ys); g.lineTo(x, yc); g.moveTo(x + o.w, ys); g.lineTo(x + o.w, yc); g.lineWidth = 3; g.strokeStyle = c.ink; g.stroke();
+    }
+    g.beginPath(); g.moveTo(x, yc + 4); g.lineTo(x + o.w, yc + 4); g.lineWidth = 3; g.strokeStyle = c.ink; g.stroke();
+    // lights, every so often
     for (let lx = Math.ceil((camX + x) / 260) * 260 + 90; lx < camX + x + o.w - 40; lx += 260) {
       const sx = lx - camX;
-      if (sx < vL - 40 || sx > vR + 40) continue;
-      g.imageSmoothingEnabled = false; g.drawImage(lampSprite(), sx - 70, yc - 30, 140, 140); g.imageSmoothingEnabled = true;
-      g.beginPath(); g.moveTo(sx, yc); g.lineTo(sx, yc + 30); g.lineWidth = 2; g.strokeStyle = STONE.ink; g.stroke();
-      g.fillStyle = "#ffcf6b"; g.fillRect(sx - 5, yc + 30, 10, 13); g.strokeRect(sx - 5, yc + 30, 10, 13);
+      if (sx < vL - 80 || sx > vR + 80) continue;
+      if (th.lamp === "lantern") {
+        drawGlow(g, "255,190,90", sx, yc + 40, 140);
+        g.beginPath(); g.moveTo(sx, yc); g.lineTo(sx, yc + 30); g.lineWidth = 2; g.strokeStyle = c.ink; g.stroke();
+        g.fillStyle = "#ffcf6b"; g.fillRect(sx - 5, yc + 30, 10, 13); g.lineWidth = 2; g.strokeRect(sx - 5, yc + 30, 10, 13);
+      } else if (th.lamp === "furnace") {
+        const fy = yc + 60, fl = 0.7 + 0.3 * Math.sin(t * 9 + lx);
+        drawGlow(g, "255,120,30", sx, fy, 170 * fl);
+        g.fillStyle = "#1a0e0a"; g.fillRect(sx - 22, fy - 16, 44, 32);
+        g.fillStyle = `rgba(255,${Math.round(150 + 70 * fl)},40,1)`; g.fillRect(sx - 17, fy - 11, 34, 22);
+        g.lineWidth = 3; g.strokeStyle = c.ink; g.strokeRect(sx - 22, fy - 16, 44, 32);
+      } else if (th.lamp === "porthole") {
+        const py = yc + 55;
+        drawGlow(g, "120,200,255", sx, py, 120);
+        g.beginPath(); g.arc(sx, py, 17, 0, TAU); g.fillStyle = "#2f7ea8"; g.fill(); g.lineWidth = 6; g.strokeStyle = "#b08a5e"; g.stroke(); g.lineWidth = 2; g.strokeStyle = c.ink; g.stroke();
+        g.fillStyle = "rgba(255,255,255,0.5)"; g.beginPath(); g.arc(sx - 5, py - 6, 4, 0, TAU); g.fill();
+      } else if (th.lamp === "fireflies") {
+        for (let k = 0; k < 4; k++) { const fx = sx + Math.sin(t * 1.3 + k * 2 + lx) * 50, fy = yc + 70 + Math.cos(t * 1.1 + k * 3) * 40; drawGlow(g, "255,240,120", fx, fy, 36); g.fillStyle = "#fff6a0"; g.beginPath(); g.arc(fx, fy, 2.2, 0, TAU); g.fill(); }
+      } else if (th.lamp === "aurora") {
+        g.globalAlpha = 0.25 + 0.1 * Math.sin(t * 1.5 + lx);
+        g.fillStyle = hash(lx) < 0.5 ? "#6fe3c5" : "#8fb6ff";
+        g.beginPath(); g.moveTo(sx - 60, yc + 6); g.bezierCurveTo(sx - 20, yc + 70, sx + 20, yc + 10, sx + 60, yc + 80); g.lineTo(sx + 60, yc + 96); g.bezierCurveTo(sx + 20, yc + 26, sx - 20, yc + 86, sx - 60, yc + 22); g.closePath(); g.fill();
+        g.globalAlpha = 1;
+      } else if (th.lamp === "candle") {
+        const cy = yc + 50;
+        drawGlow(g, "242,238,228", sx, cy - 10, 90);
+        g.fillStyle = "#f2eee4"; g.fillRect(sx - 4, cy - 4, 8, 20);
+        g.beginPath(); g.ellipse(sx, cy - 10, 3, 6 + Math.sin(t * 12 + lx) * 1.5, 0, 0, TAU); g.fillStyle = "#ffd23f"; g.fill();
+      }
     }
-    // solid rock overhead, capped with the zone's own surface
-    stoneFill(g, x, x + o.w, ys + 30, yc, false);
-    g.save(); g.beginPath(); g.rect(x, ys - 40, o.w, 72); g.clip();
-    g.translate(0, -o.surface); st.ground(g, x - 1, x + o.w + 1, GROUND + 34, t); g.restore();
-    // lumpy ceiling edge and the cave-mouth faces
-    g.beginPath(); g.moveTo(x, yc);
-    for (let px = x + 10, i = 0; px < x + o.w - 6; px += 12, i++) g.lineTo(px, yc + 3 + hash(Math.round((px + camX) / 12) * 1.3) * 8);
-    g.lineTo(x + o.w, yc); g.closePath(); g.fillStyle = STONE.dark; g.fill();
-    g.beginPath(); g.moveTo(x, yc + 4); g.lineTo(x + o.w, yc + 4); g.moveTo(x, ys); g.lineTo(x, yc); g.moveTo(x + o.w, ys); g.lineTo(x + o.w, yc);
-    g.lineWidth = 3; g.strokeStyle = STONE.ink; g.stroke();
   }
-  function drawLava(g, x, o, t) {
-    const y = GROUND - o.top;
+  // ---- Signature-section hazards ----
+  function drawPit(g, x, o, t) {
+    const th = ugTheme(o.theme), y = GROUND - o.top;
+    const P = { lava: ["#ffb02e", "#ff5a1f", "#8a1a0a", "#ffe08a", "255,120,30"], molten: ["#fff3b0", "#ffb02e", "#c0501c", "#ffffff", "255,190,60"],
+      water: ["#3a8fb3", "#1f5e7e", "#0c2a3a", "#bfe8ff", "80,170,220"], icewater: ["#cfeeff", "#7fc4ea", "#2f6f9a", "#ffffff", "160,220,255"],
+      ink: ["#2a2a2a", "#111111", "#000000", "#f2eee4", "242,238,228"] }[th.pit || "lava"] || [];
     const grd = g.createLinearGradient(0, y, 0, y + 90);
-    grd.addColorStop(0, "#ffb02e"); grd.addColorStop(0.3, "#ff5a1f"); grd.addColorStop(1, "#8a1a0a");
+    grd.addColorStop(0, P[0]); grd.addColorStop(0.3, P[1]); grd.addColorStop(1, P[2]);
     g.fillStyle = grd;
     g.beginPath(); g.moveTo(x, wBot);
     for (let px = x; px <= x + o.w; px += 6) g.lineTo(px, y + Math.sin((px + camX) * 0.08 + t * 4) * 2.5);
     g.lineTo(x + o.w, wBot); g.closePath(); g.fill();
-    g.fillStyle = "#ffe08a";
+    g.fillStyle = P[3];
     for (let i = 0; i < 3; i++) { const bx = x + ((i * 37 + t * 20) % Math.max(10, o.w)), r = 2 + ((t * 3 + i) % 1) * 3; g.beginPath(); g.arc(bx, y + 4, r, 0, TAU); g.fill(); }
+    if (th.pit === "icewater") { g.fillStyle = "#ffffff"; g.globalAlpha = 0.8; for (let i = 0; i < 2; i++) { const cx = x + o.w * (0.3 + i * 0.4); g.beginPath(); g.moveTo(cx - 9, y + 2); g.lineTo(cx + 7, y); g.lineTo(cx + 10, y + 6); g.lineTo(cx - 6, y + 7); g.closePath(); g.fill(); } g.globalAlpha = 1; }
     const glow = g.createLinearGradient(0, y - 50, 0, y);
-    glow.addColorStop(0, "rgba(255,120,30,0)"); glow.addColorStop(1, "rgba(255,120,30,0.35)");
+    glow.addColorStop(0, `rgba(${P[4]},0)`); glow.addColorStop(1, `rgba(${P[4]},0.3)`);
     g.fillStyle = glow; g.fillRect(x - 10, y - 50, o.w + 20, 50);
   }
-  function drawCrystal(g, x, by, dir, seed) {
-    const cols = [["#b98bff", "#7a4de0", "#e3d2ff"], ["#5ee9ff", "#1f8ea3", "#d6fbff"]][seed & 1];
+  function drawCrystal(g, x, by, dir, seed, cols, ink) {
     const shard = (cx, w, h) => { g.beginPath(); g.moveTo(cx - w, by); g.lineTo(cx - w * 0.6, by - dir * h * 0.75); g.lineTo(cx, by - dir * h); g.lineTo(cx + w * 0.6, by - dir * h * 0.75); g.lineTo(cx + w, by); g.closePath(); };
     for (const [cx, w, h] of [[x + 11, 6, 22], [x + 29, 6, 24], [x + 20, 8, B - 6]]) {
-      shard(cx, w, h); g.fillStyle = cols[0]; g.fill(); g.lineWidth = 2.2; g.strokeStyle = STONE.ink; g.stroke();
+      shard(cx, w, h); g.fillStyle = cols[0]; g.fill(); g.lineWidth = 2.2; g.strokeStyle = ink; g.stroke();
       g.beginPath(); g.moveTo(cx, by - dir * h); g.lineTo(cx + w * 0.6, by - dir * h * 0.75); g.lineTo(cx + w * 0.3, by); g.closePath(); g.fillStyle = cols[1]; g.fill();
       g.beginPath(); g.moveTo(cx - w * 0.3, by - dir * 3); g.lineTo(cx - w * 0.15, by - dir * h * 0.6); g.lineWidth = 1.5; g.strokeStyle = cols[2]; g.stroke();
     }
   }
-  function drawStalactite(g, x, top, w, h, falling, uceilY) {
-    g.save();
-    if (falling) { g.beginPath(); g.rect(x - 10, uceilY, w + 20, 4000); g.clip(); }
-    if (falling) {
-      g.beginPath(); g.moveTo(x + 2, top); g.lineTo(x + w - 2, top); g.lineTo(x + w * 0.62, top + h * 0.7); g.lineTo(x + w / 2, top + h); g.lineTo(x + w * 0.38, top + h * 0.7); g.closePath();
-    } else {
-      g.beginPath(); g.moveTo(x, top + h); g.lineTo(x + 3, top + h * 0.35); g.lineTo(x + w * 0.4, top + 4); g.lineTo(x + w * 0.8, top + h * 0.2); g.lineTo(x + w, top + h); g.closePath();
+  function drawThemeSpike(g, st, o, x, by, t) {
+    const th = ugTheme(o.theme), dir = o.dir, ink = th.col.ink;
+    switch (th.spike) {
+      case "crystal": drawCrystal(g, x, by, dir, o.seed, [["#b98bff", "#7a4de0", "#e3d2ff"], ["#5ee9ff", "#1f8ea3", "#d6fbff"]][o.seed & 1], ink); break;
+      case "ice": drawCrystal(g, x, by, dir, o.seed, ["#e8f7ff", "#9fd3f2", "#ffffff"], ink); break;
+      case "hot": {
+        const tip = by - dir * (B - 4);
+        drawGlow(g, "255,140,40", x + B / 2, by - dir * 16, 70);
+        tri(g, x + 4, by, x + B / 2, tip, x + B - 4, by);
+        const grd = g.createLinearGradient(0, by, 0, tip); grd.addColorStop(0, "#5a2a14"); grd.addColorStop(1, "#ffd23f");
+        g.fillStyle = grd; g.fill(); g.lineWidth = 2.6; g.strokeStyle = ink; g.stroke(); break;
+      }
+      case "urchin": {
+        const cy = by - dir * 13;
+        g.beginPath();
+        for (let i = 0; i < 12; i++) { const a = -Math.PI + (i / 11) * Math.PI; g.moveTo(x + B / 2 + Math.cos(a) * 10, cy + dir * Math.sin(a) * 10); g.lineTo(x + B / 2 + Math.cos(a) * 21, cy + dir * Math.sin(a) * 25); }
+        g.lineWidth = 2.4; g.strokeStyle = "#3b1d4a"; g.stroke();
+        g.beginPath(); g.arc(x + B / 2, cy, 12, 0, TAU); g.fillStyle = "#6a3a86"; g.fill(); g.lineWidth = 2.5; g.strokeStyle = ink; g.stroke();
+        g.fillStyle = "#c79be0"; g.beginPath(); g.arc(x + B / 2 - 4, cy - dir * 4, 3, 0, TAU); g.fill(); break;
+      }
+      case "thorn": {
+        g.fillStyle = "#3a5a22"; g.strokeStyle = ink; g.lineWidth = 2;
+        for (const [ox, h, lean] of [[8, 22, -5], [20, B - 6, 3], [31, 24, 6]]) { g.beginPath(); g.moveTo(x + ox - 6, by); g.quadraticCurveTo(x + ox - 2, by - dir * h * 0.6, x + ox + lean, by - dir * h); g.quadraticCurveTo(x + ox + 2, by - dir * h * 0.5, x + ox + 6, by); g.closePath(); g.fill(); g.stroke(); }
+        break;
+      }
+      case "inkblot": {
+        const tip = by - dir * (B - 4);
+        g.beginPath(); g.moveTo(x + 3, by);
+        for (let i = 1; i < 8; i++) { const px = x + 3 + (i / 8) * (B - 6), h = (1 - Math.abs(i / 8 - 0.5) * 2) * (B - 4); g.lineTo(px + (i % 2 ? -3 : 3), by - dir * h * (i % 2 ? 1 : 0.7)); }
+        g.lineTo(x + B - 3, by); g.closePath();
+        g.fillStyle = "#000000"; g.fill(); g.lineWidth = 2; g.strokeStyle = "#f2eee4"; g.stroke(); break;
+      }
+      default: st.spike(g, x, by, dir, o.seed);
     }
-    g.fillStyle = STONE.base; g.fill(); g.lineWidth = 2.6; g.strokeStyle = STONE.ink; g.stroke();
-    g.beginPath(); g.moveTo(x + w * 0.35, top + 6); g.lineTo(x + w * 0.45, top + h * 0.55); g.lineWidth = 2; g.strokeStyle = STONE.light; g.stroke();
+  }
+  function drawThemeFall(g, o, x, t) {
+    const th = ugTheme(o.theme), c = th.col, top = GROUND - (o.bot + o.hh * B), w = o.w, h = o.hh * B, falling = o.state !== "rest", clipY = GROUND - o.uceil;
+    g.save();
+    if (falling) { g.beginPath(); g.rect(x - 10, clipY, w + 20, 4000); g.clip(); }
+    const ink = th.col.ink;
+    switch (th.fall) {
+      case "stalactite": case "icicle": {
+        const [fill, hl] = th.fall === "icicle" ? ["#d8f1ff", "#ffffff"] : [c.base, c.light];
+        if (falling) { g.beginPath(); g.moveTo(x + 2, top); g.lineTo(x + w - 2, top); g.lineTo(x + w * 0.62, top + h * 0.7); g.lineTo(x + w / 2, top + h); g.lineTo(x + w * 0.38, top + h * 0.7); g.closePath(); }
+        else { g.beginPath(); g.moveTo(x, top + h); g.lineTo(x + 3, top + h * 0.35); g.lineTo(x + w * 0.4, top + 4); g.lineTo(x + w * 0.8, top + h * 0.2); g.lineTo(x + w, top + h); g.closePath(); }
+        g.fillStyle = fill; g.fill(); g.lineWidth = 2.6; g.strokeStyle = ink; g.stroke();
+        g.beginPath(); g.moveTo(x + w * 0.35, top + 6); g.lineTo(x + w * 0.45, top + h * 0.55); g.lineWidth = 2; g.strokeStyle = hl; g.stroke();
+        break;
+      }
+      case "slag": case "inkdrop": {
+        const slag = th.fall === "slag";
+        if (slag) drawGlow(g, "255,140,40", x + w / 2, top + h / 2, 80);
+        g.beginPath();
+        if (falling) { g.moveTo(x + w / 2, top); g.bezierCurveTo(x + w + 2, top + h * 0.6, x + w - 2, top + h, x + w / 2, top + h); g.bezierCurveTo(x + 2, top + h, x - 2, top + h * 0.6, x + w / 2, top); }
+        else { g.ellipse(x + w / 2, top + h * 0.7, w * 0.55, h * 0.32, 0, 0, TAU); }
+        const grd = g.createLinearGradient(0, top, 0, top + h);
+        if (slag) { grd.addColorStop(0, "#fff3b0"); grd.addColorStop(1, "#ff5a1f"); } else { grd.addColorStop(0, "#333"); grd.addColorStop(1, "#000"); }
+        g.fillStyle = grd; g.fill(); g.lineWidth = 2.2; g.strokeStyle = slag ? ink : "#f2eee4"; g.stroke();
+        g.fillStyle = "rgba(255,255,255,0.6)"; g.beginPath(); g.arc(x + w * 0.38, top + h * 0.45, 3, 0, TAU); g.fill();
+        break;
+      }
+      case "crate": {
+        g.fillStyle = "#b07a3e"; g.fillRect(x + 1, top + 1, w - 2, h - 2);
+        g.strokeStyle = "#6b4520"; g.lineWidth = 3; g.beginPath(); g.moveTo(x + 4, top + 4); g.lineTo(x + w - 4, top + h - 4); g.moveTo(x + w - 4, top + 4); g.lineTo(x + 4, top + h - 4); g.stroke();
+        g.lineWidth = 2.6; g.strokeStyle = ink; g.strokeRect(x + 1, top + 1, w - 2, h - 2);
+        break;
+      }
+      case "coconut": {
+        const r = Math.min(w, h) * 0.46, cx = x + w / 2, cy = top + h - r - 1;
+        g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.fillStyle = "#7a4a26"; g.fill(); g.lineWidth = 2.6; g.strokeStyle = ink; g.stroke();
+        g.fillStyle = "#3a2210"; for (const [dx, dy] of [[-5, -4], [4, -5], [0, 3]]) { g.beginPath(); g.arc(cx + dx, cy + dy, 2.2, 0, TAU); g.fill(); }
+        if (falling) { g.beginPath(); g.moveTo(cx, top); g.lineTo(cx, clipY); g.lineWidth = 2; g.strokeStyle = "#2b6a2e"; g.stroke(); }
+        break;
+      }
+      default: { g.fillStyle = c.base; g.fillRect(x, top, w, h); g.lineWidth = 2.6; g.strokeStyle = ink; g.strokeRect(x, top, w, h); }
+    }
     g.restore();
   }
   function drawCrusher(g, x, o, uceilY) {
-    const tp = GROUND - (o.bot + o.hh * B), bt = GROUND - o.bot;
-    g.fillStyle = STONE.dark; g.fillRect(x + o.w / 2 - 6, uceilY, 12, tp - uceilY);
-    g.strokeStyle = STONE.ink; g.lineWidth = 2.5; g.strokeRect(x + o.w / 2 - 6, uceilY, 12, tp - uceilY);
-    stoneFill(g, x, x + o.w, tp, bt, false);
-    g.fillStyle = "#9aa3ad"; g.fillRect(x, tp + 8, o.w, 7);
+    const th = ugTheme(o.theme), c = th.col, tp = GROUND - (o.bot + o.hh * B), bt = GROUND - o.bot;
+    const rod = { foundry: "#6b5a50", shipwreck: "#3a3a3a", icecave: "#9fd3f2", inkwell: "#2a2a2a", treetops: "#5a3a1e" }[o.theme] || c.dark;
+    g.fillStyle = rod; g.fillRect(x + o.w / 2 - 6, uceilY, 12, tp - uceilY);
+    g.strokeStyle = c.ink; g.lineWidth = 2.5; g.strokeRect(x + o.w / 2 - 6, uceilY, 12, tp - uceilY);
+    if (o.theme === "shipwreck") {                           // an anchor
+      const cx = x + o.w / 2;
+      g.beginPath(); g.moveTo(cx, tp); g.lineTo(cx, bt - 6); g.moveTo(x + 2, bt - 16); g.quadraticCurveTo(cx, bt + 4, x + o.w - 2, bt - 16); g.moveTo(cx - 12, tp + 12); g.lineTo(cx + 12, tp + 12);
+      g.lineWidth = 7; g.strokeStyle = "#4a4a4a"; g.stroke(); g.lineWidth = 2; g.strokeStyle = c.ink; g.stroke();
+      g.beginPath(); g.arc(cx, tp + 4, 6, 0, TAU); g.lineWidth = 4; g.strokeStyle = "#4a4a4a"; g.stroke();
+      return;
+    }
+    themeFill(g, th, x, x + o.w, tp, bt, false);
+    g.fillStyle = th.col.rim; g.fillRect(x, tp + 8, o.w, 7);
     g.beginPath(); for (let i = 0; i < 4; i++) { g.moveTo(x + 2 + i * (o.w - 4) / 3, bt); g.lineTo(x + 2 + i * (o.w - 4) / 3 + 3, bt - 6); }
-    g.lineWidth = 2; g.stroke();
+    g.lineWidth = 2; g.strokeStyle = c.ink; g.stroke();
     g.lineWidth = 3; g.strokeRect(x, tp, o.w, bt - tp);
   }
 
@@ -3524,7 +4006,7 @@
     vL = zx - zx / z; vR = zx + (viewW - zx) / z;
     wTop = zy + (-offY - cs - 20 - zy) / z; wBot = zy + (viewH - offY - cs + 20 - zy) / z;
     for (const o of S.objs) if (o.t === "ug") { const x = o.x - camX; if (x < vR + 20 && x + o.w > vL - 20) drawUnderground(g, st, x, o, t); }
-    for (const o of S.objs) if (o.t === "roof") { const x = o.x - camX; if (x < vR + 20 && x + o.w > vL - 20) st.roof(g, x, o.w, GROUND - o.ceil, t, o.seed); }
+    for (const o of S.objs) if (o.t === "roof" && !o.hidden) { const x = o.x - camX; if (x < vR + 20 && x + o.w > vL - 20) st.roof(g, x, o.w, GROUND - o.ceil, t, o.seed); }
     drawTerrain(g, st, t);
     // big-moment wash: over backdrop and ground only, so obstacles stay crisp
     if (pop > 0.02) { g.save(); g.globalAlpha = pop * 0.2; g.fillStyle = popCol; g.fillRect(vL - 10, wTop - 10, vR - vL + 20, wBot - wTop + 20); g.restore(); }
@@ -3534,8 +4016,8 @@
       if (x > right) break;
       if (x + o.w < vL - 80) continue;
       switch (o.t) {
-        case "s": if (o.crystal) drawCrystal(g, x, GROUND - o.base, o.dir, o.seed); else st.spike(g, x, GROUND - o.base, o.dir, o.seed); break;
-        case "lava": drawLava(g, x, o, t); break;
+        case "s": if (o.theme) drawThemeSpike(g, st, o, x, GROUND - o.base, t); else st.spike(g, x, GROUND - o.base, o.dir, o.seed); break;
+        case "lava": drawPit(g, x, o, t); break;
         case "b": {
           const bh = o.top - o.bot;
           if (o.terrain) { drawOverhang(g, st, x, o, t); break; }
@@ -3565,7 +4047,7 @@
               g.lineWidth = 2; g.strokeStyle = "#ff4d4d"; g.stroke();
               g.restore();
             }
-            drawStalactite(g, sx, GROUND - tp, o.w, o.hh * B, o.state !== "rest", GROUND - o.uceil);
+            drawThemeFall(g, o, sx, t);
             break;
           }
           const sx = o.state === "shake" && !reducedMotion ? x + Math.sin(t * 90) * 2.5 : x;
@@ -3627,6 +4109,7 @@
     if (!S.dead) {
       const p = S.player, ph = playerH();
       const pcx = p.x - camX + P / 2, pcy = GROUND - (p.h + ph / 2);
+      if (S.ugTheme === "inkwell") drawGlow(g, "242,238,228", pcx, pcy, 90);   // keeps the ink-black cube visible in the inkwell
       if (S.pmode === "ship") st.ship(g, pcx, pcy, clamp(-p.vy / 560, -0.5, 0.5));
       else if (S.pmode === "ball") st.ball(g, pcx, pcy, p.rot);
       else st.player(g, pcx, pcy, p.rot, S.ducking, S.flipped, t);
@@ -3972,6 +4455,7 @@
     }
 
     S.levelTime += dt;
+    S.runT += dt;
     spawn();
     updateDynamics(dt);
     physicsSteps(dt);
@@ -4001,8 +4485,8 @@
     } else {
       p.rot += dt * 6.2;
     }
-    S.inUG = false;
-    for (const o of S.objs) { if (o.x > p.x) break; if (o.t === "ug" && p.x < o.x + o.w) S.inUG = true; }
+    S.inUG = false; S.ugTheme = "";
+    for (const o of S.objs) { if (o.x > p.x) break; if (o.t === "ug" && p.x < o.x + o.w) { S.inUG = true; S.ugTheme = o.theme; } }
     const camRight = camLeft() + viewW;
     for (const o of S.objs) {
       if (o.x > camRight) break;
@@ -4147,7 +4631,7 @@
     }
     requestAnimationFrame(frame);
   }
-  window.__beatline = { S, ROUTES, loadLevel, dbg: () => ({ wTop, wBot, vL, vR, camH, zoom }), buildUnderground, setZoom: z => { zoom = z; }, particleCount: () => particles.length, render, CHUNKS, STAR_CHUNKS, buildShip, buildBall, buildStar, STYLES, solve, buildChunk, place, setEnv, startGame, spawn, speed, emit, updateCamera, updateDynamics, LEVEL_SECONDS, B, CEIL_H };
+  window.__beatline = { S, statsLog, buildSignature, ROUTES, loadLevel, dbg: () => ({ wTop, wBot, vL, vR, camH, zoom }), buildUnderground, setZoom: z => { zoom = z; }, particleCount: () => particles.length, render, CHUNKS, STAR_CHUNKS, buildShip, buildBall, buildStar, STYLES, solve, buildChunk, place, setEnv, startGame, spawn, speed, emit, updateCamera, updateDynamics, LEVEL_SECONDS, B, CEIL_H };
   try { window.claude?.hot?.snapshot?.(() => ({ mode: S.mode, level: S.level, attempts: S.attempts })); } catch { /* no hot reload */ }
   const hot = window.claude?.hot;
   if (hot?.ready) hot.ready(boot); else boot(hot?.data ?? {});
