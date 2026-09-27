@@ -2104,6 +2104,14 @@
       c.low(c.x, 2).run(2 + w(3));
     } },
 
+    { lvl: 0, tier: 1, name: "first steps", build(c, k, w) {
+      // the very start of the game: one thing at a time, with room to breathe
+      c.run(5).spike(c.x).run(w(7));
+      c.block(c.x, 2, 1).run(2 + w(6));
+      c.up().run(w(6)).down().run(w(5));
+      c.spike(c.x).run(w(5));
+    } },
+
     // ---- Extra terrain for the first two zones ----
     { lvl: 0, tier: 1, name: "switchbacks", build(c, k, w) {
       const L = stepLen(k);
@@ -2529,7 +2537,7 @@
   // and end of the level (1 = 330 px/s); it ramps evenly across the sections.
   const ROUTES = [
     { k: [1.0, 1.1], sections: [          // 1. Meadow Run: learn to jump, climb and use pads and orbs
-      "rolling hills", "hillside", "pit hops", "orb step", "star: sky path", "crate walk",
+      "first steps", "hillside", "pit hops", "rolling hills", "orb step", "star: sky path", "crate walk",
       "spring step", "switchbacks", "mine", "crate pyramid", "hilltop", "star: broken bridge",
       "rabbit hole", "spike garden", "star: secret pit", "summit dive", "block fortress",
     ] },
@@ -2541,7 +2549,7 @@
     { k: [1.2, 1.34], sections: [         // 3. Reef: falling and moving blocks, speed portals
       "rockfall", "slider hop", "reef shelves", "star: riptide", "pillar bridge", "sunken bridge",
       "ship", "gate run", "landslide", "shipwreck", "tide bridge", "star: sunken arch", "coral terrace",
-      "sunken ruins", "sea cave", "star: spike hop", "crumbling causeway", "gate and rockfall", "tidal stairs",
+      "sunken ruins", "trench", "sea cave", "star: spike hop", "crumbling causeway", "gate and rockfall", "tidal stairs",
     ] },
     { k: [1.32, 1.5], sections: [         // 4. Canopy: low ceilings, green dash orbs, the ball
       "under the branches", "dash gap", "ledge crawl", "star: root crawl", "duck and leap", "ship",
@@ -2584,7 +2592,7 @@
       const e = c.x, ox = e + w(1.3), ST = 4;
       c.orb(ox, 2.9);
       const pw = w(3), gp = w(2.2);
-      let x = ox + w(1.6);
+      let x = ox + w(2.1);
       const s1 = x;
       for (const [i, tp] of [[0, ST], [1, ST + 1], [2, ST + 0.5]]) {
         c.block(x, pw, 0.6, tp - 0.6);
@@ -2592,7 +2600,7 @@
         x += pw + (i < 2 ? gp : 0);
       }
       c.run(x + w(4) - c.x);
-      c.spike(s1 + Math.floor(pw / 2));              // the main path underneath has its own, easier hazard
+      c.spike(s1 + pw + gp + Math.floor(pw / 2));    // the main path underneath has its own, easier hazard, well clear of the orb
       c.hi = Math.max(c.hi, ST + 1); c.allowHigh = true;
     } },
     { name: "star: broken bridge", build(c, k, w) {
@@ -2609,9 +2617,9 @@
         if (i === 2) c.star(x + pw / 2, T + 0.2);
         x += pw + gp;
       }
-      c.run(x - c.x + w(1));
+      c.run(x - c.x + w(2.5));
       c.spike(x0 + w(6.5));
-      c.pad(c.x).run(w(2.5)).up(T).run(w(4));
+      c.pad(c.x).run(w(3)).up(T).run(w(4));
       c.allowLow = true;
     } },
     { name: "star: secret pit", build(c, k, w) {
@@ -2857,25 +2865,28 @@
   // way in, look, hazards and way out. `dir` down sinks below the surface, up
   // climbs above it. `pats` are the hazard patterns mixed through the middle.
   const SIGS = {
-    mine:      { zone: 0, dir: "down", depth: 8, clear: 4.6, entry: "stairs", exit: "springs", pats: ["spike", "pit", "fall", "crusher", "ledge"] },
-    foundry:   { zone: 1, dir: "down", depth: 8, clear: 4.6, entry: "drop", exit: "springs", pats: ["spike", "pit", "fall", "crusher", "saw"] },
-    shipwreck: { zone: 2, dir: "down", depth: 6, clear: 4.6, entry: "stairs", exit: "springs", pats: ["spike", "pit", "fall", "crusher", "cargo"] },
-    treetops:  { zone: 3, dir: "up", depth: 6, clear: 5, entry: "springs", exit: "stairs", pats: ["spike", "gap", "fall", "duck", "dash"] },
-    icecave:   { zone: 4, dir: "down", depth: 8, clear: CEIL_H / B, entry: "stairs", exit: "springs", pats: ["spike", "pit", "fall", "flip"] },
-    inkwell:   { zone: 5, dir: "down", depth: 8, clear: 4.6, entry: "drop", exit: "springs", pats: ["spike", "pit", "fall", "crusher", "saw", "flip"] },
+    // `down`: the way in, as [drop in blocks, run after it] steps ("gap" = a hole to hop);
+    // `ups`: the springs on the way out, as the height each one lifts you.
+    mine:      { zone: 0, dir: "down", depth: 8, clear: 4.6, down: [[1, 3.5], [2, 4], [1, 3], [2, 4.5], [2, 3]], ups: [3, 3], pats: ["spike", "pit", "fall", "crusher", "ledge"] },
+    foundry:   { zone: 1, dir: "down", depth: 8, clear: 4.6, down: [[3, 5.5], [3, 4.5], [2, 3.5]], ups: [3, 3, 2], pats: ["spike", "pit", "fall", "crusher", "saw"] },
+    shipwreck: { zone: 2, dir: "down", depth: 6, clear: 4.6, down: [[2, 3.5], "gap", [1, 4], [3, 3.5]], ups: [3, 3], pats: ["spike", "pit", "fall", "crusher", "cargo"] },
+    treetops:  { zone: 3, dir: "up", depth: 6, clear: 5, ups: [3, 3], pats: ["spike", "gap", "fall", "duck", "dash"] },
+    icecave:   { zone: 4, dir: "down", depth: 8, clear: CEIL_H / B, down: [[4, 5.5], [2, 3], [2, 4]], ups: [3, 3, 2], pats: ["spike", "pit", "fall", "flip"] },
+    inkwell:   { zone: 5, dir: "down", depth: 8, clear: 4.6, down: [[5, 6], [3, 4.5]], ups: [4, 4], pats: ["spike", "pit", "fall", "crusher", "saw", "flip"] },
   };
   const SIG_OF_ZONE = ["mine", "foundry", "shipwreck", "treetops", "icecave", "inkwell"];
   const SIG_ALIASES = { "ice cave": "icecave", underground: null };
   function buildSignature(k, level, id) {
     const sig = SIGS[id], c = builder(k), w = n => Math.max(1, Math.round(n * k)), L = stepLen(k);
     c.run(3);
-    // the way in
-    if (sig.dir === "up") { c.pad(c.x).run(w(2.5)).up(3).run(w(4)); c.pad(c.x).run(w(2.5)).up(3).run(w(3)); }
-    else if (sig.entry === "drop") { c.run(w(1.5)); c.down(sig.depth).run(w(2)); }
-    else for (let i = 0; i < sig.depth / 2; i++) c.down(2).run(w(3));
-    const floor = c.f, xs = c.x, ceil = floor + sig.clear;
+    // the way in: a shaft drawn in the section's own style, walked down (or sprung up) on its own floors
+    const e0 = c.x;
     c.brk = true; c.ugOn = id;
-    c.run(w(3.5));
+    c.run(w(2));
+    if (sig.dir === "up") { c.pad(c.x).run(w(2.5)).up(3).run(w(4)); c.pad(c.x).run(w(2.5)).up(3).run(w(3)); }
+    else for (const st of sig.down) { if (st === "gap") c.gap(w(2.4)); else c.down(st[0]).run(w(st[1])); }
+    const floor = c.f, xs = c.x, ceil = floor + sig.clear;
+    c.run(w(5.5));                                 // a calm run after the way in, before the first hazard
     const xEnd = xs + Math.round((level >= 3 ? 14 : 12) * 8.25 * k);
     const pats = {
       spike: () => c.spike(c.x, level >= 2 && genRand() < 0.5 ? 2 : 1).run(w(4.5)),
@@ -2900,21 +2911,23 @@
     if (c.f !== floor) c.down().run(w(3.5));
     c.run(w(1.5));
     const xe = c.x;
-    c.brk = true; c.ugOn = false;
     // the way out
     if (sig.dir === "up") { for (let i = 0; i < sig.depth / 2; i++) c.down(2).run(w(3)); c.run(w(2)); }
     else {
       let left = sig.depth;
-      while (left >= 3) { c.pad(c.x).run(w(2.5)).up(3).run(w(left - 3 >= 3 ? 4 : 6.5)); left -= 3; }
+      sig.ups.forEach((h, i) => { c.pad(c.x).run(w(2.5)).up(h).run(w(i < sig.ups.length - 1 ? 4 : 6.5)); left -= h; });
       while (left > 0) { c.up().run(left > 1 ? L : w(3.5)); left--; }
     }
+    const ex = c.x;
+    c.brk = true; c.ugOn = false;
+    c.run(w(2));
     for (const o of c.o) {
       if (o.x < xs || o.x >= xe) continue;
       if (o.t === "s" || o.t === "lava") o.theme = id;
       if (o.t === "fb" || o.t === "mb") { o.uceil = ceil; o.theme = id; }
       if (o.t === "roof") o.hidden = true;           // the section draws its own ceiling
     }
-    c.o.push({ t: "ug", x: xs, w: xe - xs, ceil, surface: 0, theme: id });
+    c.o.push({ t: "ug", x: e0, w: ex - e0, xs, xe, ceil, surface: 0, theme: id });
     c.allowLow = true;
     c.name = id;
     return c;
@@ -2949,7 +2962,7 @@
       case "gp": Object.assign(o, { x: X, w: B, flip: s.flip, base: H(s.base), ceil: H(s.base) + CEIL_H }); break;
       case "roof": Object.assign(o, { x: X, w: s.w * B, ceil: H(s.ceil) }); if (s.hidden) o.hidden = true; break;
       case "sk": Object.assign(o, { x: X, w: 1, k: s.k }); break;
-      case "ug": Object.assign(o, { x: X, w: s.w * B, ceil: H(s.ceil), surface: H(s.surface), theme: s.theme, tip: tipsSeen["ug:" + s.theme] ? null : "ug:" + s.theme }); break;
+      case "ug": Object.assign(o, { x: X, w: s.w * B, xs: x0 + s.xs * B, xe: x0 + s.xe * B, ceil: H(s.ceil), surface: H(s.surface), theme: s.theme, tip: tipsSeen["ug:" + s.theme] ? null : "ug:" + s.theme }); break;
       case "lava": Object.assign(o, { x: X, w: s.w * B, top: H(s.top), theme: s.theme || "mine" }); break;
       case "lc": Object.assign(o, { x: X, w: s.w * B, bottom: H(s.bottom) + (s.clear ? s.clear * B : LOW_CEIL), cave: !!s.clear }); break;
       case "fb": Object.assign(o, { x: X, w: s.w * B, hh: s.h, land: H(s.land), start: H(s.land) + 6 * B, bot: H(s.land) + 6 * B, vy: 0, state: "wait", timer: 0 });
@@ -3796,8 +3809,18 @@
     g.beginPath(); g.moveTo(x, y0); g.lineTo(x, th.up ? y0 + 30 : Math.min(y1, wBot)); g.lineWidth = 3; g.strokeStyle = th.col.ink; g.stroke();
   }
   // The section's backdrop, overhead mass, lights and edges
-  function drawUnderground(g, st, x, o, t) {
-    const th = ugTheme(o.theme), c = th.col, yc = GROUND - o.ceil, ys = GROUND - o.surface;
+  function drawUnderground(g, st, xAll, oAll, t) {
+    const th = ugTheme(oAll.theme), c = th.col, yc = GROUND - oAll.ceil, ys = GROUND - oAll.surface;
+    const x = oAll.xs - camX, o = { ...oAll, w: oAll.xe - oAll.xs };
+    // entry and exit shafts: the section's backdrop, open to the sky, with its walls at the edges
+    if (!th.up) {
+      for (const [a, b] of [[xAll, x], [x + o.w, xAll + oAll.w]]) {
+        if (b <= a) continue;
+        themeFill(g, th, a, b, ys + 6, wBot, true);
+        g.beginPath(); g.moveTo(a === xAll ? a : b, ys); g.lineTo(a === xAll ? a : b, wBot); g.lineWidth = 4; g.strokeStyle = c.ink; g.stroke();
+        g.fillStyle = c.rim; g.fillRect(a, ys, b - a, 6);
+      }
+    } else themeFill(g, th, xAll, xAll + oAll.w, wTop, wBot, true);
     if (th.up) {
       themeFill(g, th, x, x + o.w, wTop, wBot, true);             // sky seen through the leaves
       themeFill(g, th, x, x + o.w, wTop, yc, false);              // the leaf canopy overhead
@@ -4486,7 +4509,12 @@
       p.rot += dt * 6.2;
     }
     S.inUG = false; S.ugTheme = "";
-    for (const o of S.objs) { if (o.x > p.x) break; if (o.t === "ug" && p.x < o.x + o.w) { S.inUG = true; S.ugTheme = o.theme; } }
+    for (const o of S.objs) {
+      if (o.x > p.x) break;
+      if (o.t !== "ug" || p.x >= o.x + o.w) continue;
+      S.ugTheme = o.theme;                          // anywhere in the section, shafts included
+      if (p.x >= o.xs && p.x < o.xe) S.inUG = true; // properly inside (muffled music)
+    }
     const camRight = camLeft() + viewW;
     for (const o of S.objs) {
       if (o.x > camRight) break;
