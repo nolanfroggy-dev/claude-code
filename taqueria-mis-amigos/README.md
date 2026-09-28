@@ -37,8 +37,20 @@ You can also double-click `site/index.html`. Everything works that way except th
 | Photos | Replace files in `site/images/` and keep the same names and aspect ratios (hero 4:3, family 1:1, menu 16:9) |
 | About story | Section marked `<!-- TODO: replace with owner's story -->` (also update `about1–3` in `STRINGS`) |
 | Review quotes | Section marked `<!-- TODO: swap in real quotes with owner permission -->` (also `q1–q4` in `STRINGS`) |
+| Order cart (demo) | Items get an "Add" button unless they have `noOrder: true` in `MENU`. Pickup slots come from `HOURS` (`LEAD_MIN`, `SLOT_MIN` in `script.js`) |
 | Demo banner | Delete the `demo-bar` `<div>` and the one-line inline `<script>` in `<head>` when going live |
 
 The visible text is translated by `script.js`, so if you edit copy in `index.html`, edit the matching `STRINGS` entry too.
 
 Before launch, set `og:image` in `index.html` to a full absolute URL (e.g. `https://yourdomain.com/images/hero.jpg`) so link previews work.
+
+## About the order cart
+
+The cart is a **demo**. Visitors can add items, change quantities, pick a pickup time and add notes. "Place pickup order" then shows a preview confirmation that says plainly the order was **not** sent, with a Call button. Nothing leaves the browser, and it asks for no name, phone or payment details.
+
+To make ordering real at launch, pick one of these:
+- Replace `submitOrder()` in `script.js` so it sends the order to a real service (for example Square Online, Toast or Clover, whichever the restaurant's register uses) and takes payment there.
+- Or remove the cart (the `ORDER CART` block in `index.html` and `script.js`) and link the "Order ahead" button to the restaurant's own ordering page.
+
+If the restaurant doesn't want online ordering at all, delete the cart before going live so nobody thinks they placed an order.
+
