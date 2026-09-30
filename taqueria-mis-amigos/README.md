@@ -36,7 +36,8 @@ You can also double-click `site/index.html`. Everything works that way except th
 | English/Spanish text | `STRINGS.en` / `STRINGS.es` in `script.js` |
 | Photos | Replace files in `site/images/` and keep the same names and aspect ratios (hero 4:3, family 1:1, menu 16:9) |
 | About story | Section marked `<!-- TODO: replace with owner's story -->` (also update `about1–3` in `STRINGS`) |
-| Review quotes | Section marked `<!-- TODO: swap in real quotes with owner permission -->` (also `q1–q4` in `STRINGS`) |
+| Live Google reviews & photos | Paste your key into `GOOGLE.apiKey` at the top of `script.js` (setup steps below) |
+| Fallback review highlights | The `#quotes` list in `index.html` (also `q1–q4` in `STRINGS`). Shown when there is no key or Google can't be reached |
 | Order cart (demo) | Items get an "Add" button unless they have `noOrder: true` in `MENU`. Pickup slots come from `HOURS` (`LEAD_MIN`, `SLOT_MIN` in `script.js`) |
 | Demo banner | Delete the `demo-bar` `<div>` and the one-line inline `<script>` in `<head>` when going live |
 
@@ -53,4 +54,21 @@ To make ordering real at launch, pick one of these:
 - Or remove the cart (the `ORDER CART` block in `index.html` and `script.js`) and link the "Order ahead" button to the restaurant's own ordering page.
 
 If the restaurant doesn't want online ordering at all, delete the cart before going live so nobody thinks they placed an order.
+
+## Turning on live Google reviews & photos
+
+The reviews section can show the restaurant's real Google rating, up to 5 Google reviews (Google chooses which ones), and up to 6 customer photos, all credited as Google requires. Until a key is added, the site shows the paraphrased highlights.
+
+1. Go to https://console.cloud.google.com and sign in. Create a project, e.g. "Mis Amigos website".
+2. Turn on billing for the project. Google asks for a card, and there's a free monthly allowance. Check the current Maps Platform pricing when you sign up.
+3. Go to **APIs & Services → Library** and enable **Maps JavaScript API** and **Places API (New)**.
+4. Go to **APIs & Services → Credentials → Create credentials → API key**.
+5. Restrict the key (important, because the key is visible in the page source):
+   - **Application restrictions → Websites**. Add your site, e.g. `https://misamigos-qc.netlify.app/*`, and later the real domain. For testing on your computer, also add `http://localhost:8000/*`.
+   - **API restrictions → Restrict key**, and tick only **Maps JavaScript API** and **Places API (New)**.
+6. Optional but recommended: in **Places API (New) → Quotas**, set a daily request cap (e.g. 500) so a traffic spike can't run up a bill. You can also set a budget alert under **Billing → Budgets & alerts**.
+7. Paste the key into `GOOGLE.apiKey` at the top of `site/script.js` and redeploy (drag the folder onto Netlify again).
+8. Open the live site, scroll to the reviews, and open the browser console (or ask for help). The site prints the restaurant's **place ID** there. Paste it into `GOOGLE.placeId` and redeploy. This makes each visit one lookup instead of two.
+
+The reviews load only when a visitor scrolls near that section, so the page stays fast and visitors who never scroll there cost nothing. Keep the reviewer names, photo credits and "Google Maps" link visible, because Google's terms require them.
 

@@ -3,6 +3,22 @@
   "use strict";
 
   /* =========================================================
+   * GOOGLE REVIEWS & PHOTOS: paste your key here (see README).
+   * apiKey:  Google Maps Platform API key, restricted to your site.
+   *          Leave "" to show the paraphrased highlights instead.
+   * placeId: optional. Leave "" and the site finds the restaurant by
+   *          name, then prints its place ID in the browser console.
+   *          Paste that ID here to skip the lookup.
+   * ========================================================= */
+  var GOOGLE = {
+    apiKey: "",
+    placeId: "",
+    query: "Taqueria Mis Amigos, 20905 E Ocotillo Rd, Queen Creek, AZ 85142",
+    maxReviews: 5,
+    maxPhotos: 6
+  };
+
+  /* =========================================================
    * HOURS — edit here. 0 = Sunday … 6 = Saturday. 24h "HH:MM".
    * null = closed. Times are Arizona time (America/Phoenix).
    * Keep in sync with the JSON-LD in index.html <head>.
@@ -132,7 +148,11 @@
       doneFlag: "Preview only", doneTitle: "Here's how your order would look",
       doneBody: "This is a demo, so your order was not sent to the restaurant. Once online ordering is live, the kitchen will get it right away and you'll see a confirmation here.",
       doneCall: "Hungry now? Call and they'll have it ready.",
-      startOver: "Start a new order", pickupAt: "Pickup: {t}", notesLabel: "Notes: {t}"
+      startOver: "Start a new order", pickupAt: "Pickup: {t}", notesLabel: "Notes: {t}",
+      ratingLive: "{r} out of 5 · {n} Google reviews", starsLabel: "{r} out of 5 stars",
+      gPhotosTitle: "From our customers on Google", gAttrib: "Reviews and photos from",
+      photoBy: "Photo: {n}", photoAlt: "Customer photo of Taqueria Mis Amigos by {n}",
+      readMore: "Read more", readLess: "Show less"
     },
     es: {
       demo: "Sitio de muestra preparado para Taqueria Mis Amigos",
@@ -185,7 +205,11 @@
       doneFlag: "Solo vista previa", doneTitle: "Así se vería tu orden",
       doneBody: "Esto es una demostración, así que tu orden no se envió al restaurante. Cuando los pedidos en línea estén activos, la cocina la recibirá al instante y verás una confirmación aquí.",
       doneCall: "¿Tienes hambre ya? Llama y te la tienen lista.",
-      startOver: "Empezar una orden nueva", pickupAt: "Recoger: {t}", notesLabel: "Notas: {t}"
+      startOver: "Empezar una orden nueva", pickupAt: "Recoger: {t}", notesLabel: "Notas: {t}",
+      ratingLive: "{r} de 5 · {n} reseñas en Google", starsLabel: "{r} de 5 estrellas",
+      gPhotosTitle: "Fotos de nuestros clientes en Google", gAttrib: "Reseñas y fotos de",
+      photoBy: "Foto: {n}", photoAlt: "Foto de Taqueria Mis Amigos tomada por {n}",
+      readMore: "Leer más", readLess: "Ver menos"
     }
   };
 
@@ -556,6 +580,178 @@
     submitOrder();
   });
 
+  /* =========================================================
+   * LIVE GOOGLE REVIEWS & PHOTOS (Places API via Maps JavaScript API).
+   * Loads only when the visitor scrolls near the reviews section, so
+   * it doesn't slow down the first screen or use API calls for
+   * visitors who never get there. Google's attribution (reviewer
+   * names, photo credits, "Google Maps" link) must stay visible.
+   * ========================================================= */
+  var googleData = null;
+
+  function safeUrl(u) { return typeof u === "string" && /^https:\/\//.test(u) ? u : null; }
+  function starText(r) {
+    var n = Math.round(r * 2) / 2, out = "";
+    for (var i = 1; i <= 5; i++) out += i <= n ? "★" : (i - 0.5 === n ? "½" : "☆");
+    return out;
+  }
+  function link(text, href) {
+    var el = document.createElement(href ? "a" : "span");
+    el.textContent = text;
+    if (href) { el.href = href; el.target = "_blank"; el.rel = "noopener"; }
+    return el;
+  }
+
+  function loadMapsJs(cb) {
+    if (window.google && google.maps && google.maps.importLibrary) { cb(); return; }
+    window.__tmaMapsReady = cb;
+    window.gm_authFailure = function () { console.warn("[Mis Amigos] Google rejected the API key. Check its restrictions in Google Cloud."); };
+    var sc = document.createElement("script");
+    sc.src = "https://maps.googleapis.com/maps/api/js?key=" + encodeURIComponent(GOOGLE.apiKey) +
+      "&v=weekly&loading=async&callback=__tmaMapsReady&language=" + lang;
+    sc.async = true;
+    sc.onerror = function () { console.warn("[Mis Amigos] Couldn't load Google Maps; showing highlights instead."); };
+    document.head.appendChild(sc);
+  }
+
+  function toGoogleData(p) {
+    return {
+      rating: p.rating,
+      count: p.userRatingCount,
+      url: safeUrl(p.googleMapsURI),
+      reviews: (p.reviews || []).map(function (r) {
+        var a = r.authorAttribution || {};
+        return {
+          name: a.displayName || "Google user", photo: safeUrl(a.photoURI), uri: safeUrl(a.uri),
+          rating: r.rating, when: r.relativePublishTimeDescription || "", text: r.text || ""
+        };
+      }).filter(function (r) { return r.text; }).slice(0, GOOGLE.maxReviews),
+      photos: (p.photos || []).slice(0, GOOGLE.maxPhotos).map(function (ph) {
+        var a = (ph.authorAttributions || [])[0] || {};
+        return { src: ph.getURI({ maxWidth: 640, maxHeight: 640 }), name: a.displayName || "Google user", uri: safeUrl(a.uri) };
+      })
+    };
+  }
+
+  function fetchGoogle() {
+    loadMapsJs(function () {
+      google.maps.importLibrary("places").then(function (lib) {
+        var fields = ["displayName", "rating", "userRatingCount", "reviews", "photos", "googleMapsURI"];
+        if (GOOGLE.placeId) {
+          var place = new lib.Place({ id: GOOGLE.placeId, requestedLanguage: lang });
+          return place.fetchFields({ fields: fields }).then(function (r) { return r.place; });
+        }
+        return lib.Place.searchByText({ textQuery: GOOGLE.query, fields: fields.concat("id"), maxResultCount: 1, language: lang })
+          .then(function (r) {
+            var found = r.places && r.places[0];
+            if (found) console.info("[Mis Amigos] Google place ID: " + found.id + "  (paste it into GOOGLE.placeId in script.js)");
+            return found;
+          });
+      }).then(function (place) {
+        if (!place) return;
+        googleData = toGoogleData(place);
+        renderGoogle();
+      }).catch(function (err) {
+        console.warn("[Mis Amigos] Google reviews unavailable; showing highlights instead.", err);
+      });
+    });
+  }
+
+  function renderGoogle() {
+    var g = googleData;
+    if (!g) return;
+
+    if (g.rating && g.count) {
+      document.getElementById("rating-stars").textContent = starText(g.rating);
+      document.getElementById("rating-text").textContent = fill(t("ratingLive"), { r: g.rating.toFixed(1), n: g.count });
+    }
+    if (g.url) {
+      document.getElementById("reviews-link").href = g.url;
+      document.getElementById("g-attrib-link").href = g.url;
+    }
+    document.getElementById("g-attrib").hidden = false;
+
+    if (g.reviews.length) {
+      var list = document.getElementById("quotes");
+      list.innerHTML = "";
+      g.reviews.forEach(function (r) {
+        var li = document.createElement("li");
+        li.className = "g-review";
+
+        var head = document.createElement("div");
+        head.className = "g-review-head";
+        if (r.photo) {
+          var av = document.createElement("img");
+          av.src = r.photo; av.alt = ""; av.width = 40; av.height = 40;
+          av.loading = "lazy"; av.referrerPolicy = "no-referrer";
+          head.appendChild(av);
+        }
+        var who = document.createElement("div");
+        var nm = link(r.name, r.uri); nm.className = "g-name";
+        var when = document.createElement("span"); when.className = "g-when"; when.textContent = r.when;
+        who.appendChild(nm); who.appendChild(when);
+        head.appendChild(who);
+
+        var stars = document.createElement("p");
+        stars.className = "g-stars";
+        stars.textContent = starText(r.rating || 0);
+        stars.setAttribute("role", "img");
+        stars.setAttribute("aria-label", fill(t("starsLabel"), { r: r.rating || 0 }));
+
+        var bq = document.createElement("blockquote");
+        var txt = document.createElement("p");
+        txt.className = "g-text is-clamped";
+        txt.textContent = r.text;
+        bq.appendChild(txt);
+
+        var more = document.createElement("button");
+        more.type = "button"; more.className = "g-more"; more.hidden = true;
+        more.textContent = t("readMore");
+        more.setAttribute("aria-expanded", "false");
+        more.addEventListener("click", function () {
+          var open = txt.classList.toggle("is-clamped") === false;
+          more.textContent = open ? t("readLess") : t("readMore");
+          more.setAttribute("aria-expanded", String(open));
+        });
+
+        li.appendChild(head); li.appendChild(stars); li.appendChild(bq); li.appendChild(more);
+        list.appendChild(li);
+        if (txt.scrollHeight > txt.clientHeight + 2) more.hidden = false;
+      });
+    }
+
+    if (g.photos.length) {
+      var ul = document.getElementById("g-photo-list");
+      ul.innerHTML = "";
+      g.photos.forEach(function (ph) {
+        var li = document.createElement("li");
+        var img = document.createElement("img");
+        img.src = ph.src; img.width = 320; img.height = 320;
+        img.loading = "lazy"; img.decoding = "async";
+        img.alt = fill(t("photoAlt"), { n: ph.name });
+        var cap = document.createElement("p");
+        cap.className = "g-photo-by";
+        cap.appendChild(document.createTextNode(fill(t("photoBy"), { n: "" })));
+        cap.appendChild(link(ph.name, ph.uri));
+        li.appendChild(img); li.appendChild(cap);
+        ul.appendChild(li);
+      });
+      document.getElementById("g-photos").hidden = false;
+    }
+  }
+
+  if (GOOGLE.apiKey) {
+    var reviewsSection = document.getElementById("reviews");
+    if ("IntersectionObserver" in window) {
+      var io = new IntersectionObserver(function (entries) {
+        if (entries.some(function (e) { return e.isIntersecting; })) { io.disconnect(); fetchGoogle(); }
+      }, { rootMargin: "800px 0px" });
+      io.observe(reviewsSection);
+    } else {
+      fetchGoogle();
+    }
+  }
+
   /* ---------- Language ---------- */
   function applyLang(next) {
     lang = STRINGS[next] ? next : "en";
@@ -579,6 +775,7 @@
     renderHours(renderStatus());
     renderMenu();
     renderCart();
+    renderGoogle();
   }
 
   document.querySelectorAll(".lang button").forEach(function (b) {

@@ -161,9 +161,11 @@
     <section class="section reviews" id="reviews" aria-labelledby="reviews-title">
       <div class="container">
         <h2 id="reviews-title" data-i18n="reviewsTitle">What people say</h2>
-        <p class="rating"><span class="stars" aria-hidden="true">★★★★½</span> <span data-i18n="rating">About 4.5 stars across 160+ reviews</span></p>
-        <!-- TODO: swap in real quotes with owner permission -->
-        <ul class="quotes">
+        <p class="rating" id="rating"><span class="stars" id="rating-stars" aria-hidden="true">★★★★½</span> <span id="rating-text" data-i18n="rating">About 4.5 stars across 160+ reviews</span></p>
+        <!-- LIVE GOOGLE REVIEWS: when GOOGLE.apiKey is set in script.js, the real
+             Google reviews replace the paraphrased highlights below. Without a key
+             (or if Google can't be reached) the highlights stay as a fallback. -->
+        <ul class="quotes" id="quotes">
           <li>
             <blockquote><p data-i18n="q1">The real deal. Homemade flavor you just can't find at the chains.</p></blockquote>
             <p class="cite" data-i18n="cite">— Local reviewer</p>
@@ -181,7 +183,12 @@
             <p class="cite" data-i18n="cite">— Local reviewer</p>
           </li>
         </ul>
-        <a class="btn btn-outline" href="https://www.google.com/maps/search/?api=1&amp;query=Taqueria+Mis+Amigos+20905+E+Ocotillo+Rd+Queen+Creek+AZ" target="_blank" rel="noopener" data-i18n="readReviews">Read our reviews</a>
+        <div class="g-photos" id="g-photos" hidden>
+          <h3 data-i18n="gPhotosTitle">From our customers on Google</h3>
+          <ul class="g-photo-list" id="g-photo-list"></ul>
+        </div>
+        <p class="g-attrib" id="g-attrib" hidden><span data-i18n="gAttrib">Reviews and photos from</span> <a id="g-attrib-link" href="https://www.google.com/maps/search/?api=1&amp;query=Taqueria+Mis+Amigos+20905+E+Ocotillo+Rd+Queen+Creek+AZ" target="_blank" rel="noopener">Google Maps</a></p>
+        <a class="btn btn-outline" id="reviews-link" href="https://www.google.com/maps/search/?api=1&amp;query=Taqueria+Mis+Amigos+20905+E+Ocotillo+Rd+Queen+Creek+AZ" target="_blank" rel="noopener" data-i18n="readReviews">Read our reviews</a>
       </div>
     </section>
 

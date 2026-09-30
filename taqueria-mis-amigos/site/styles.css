@@ -297,7 +297,7 @@ a { color: var(--terracotta-dark); }
 .rating { font-weight: 600; }
 .stars { color: var(--marigold); letter-spacing: 2px; font-size: 1.125rem; }
 .quotes { list-style: none; padding: 0; margin: 24px 0 28px; display: grid; gap: 14px; }
-@media (min-width: 720px) { .quotes { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 720px) { .quotes { grid-template-columns: 1fr 1fr; align-items: start; } }
 .quotes li {
   background: var(--cream); color: var(--ink);
   border-radius: var(--radius); padding: 20px 20px 16px; position: relative;
@@ -311,6 +311,46 @@ a { color: var(--terracotta-dark); }
 .cite { margin: 0; font-size: .875rem; color: var(--ink-soft); }
 .reviews .btn-outline { color: var(--white); border-color: var(--white); }
 .reviews .btn-outline:hover { background: var(--white); color: var(--terracotta-dark); }
+
+/* Live Google reviews (replace the highlights when an API key is set) */
+.quotes li.g-review::before { display: none; }
+.g-review { display: flex; flex-direction: column; gap: 6px; }
+.g-review-head { display: flex; align-items: center; gap: 10px; }
+.g-review-head img { width: 40px; height: 40px; border-radius: 50%; flex: none; background: var(--cream-deep); }
+.g-review-head > div { display: flex; flex-direction: column; min-width: 0; }
+.g-name { font-weight: 700; color: var(--ink); text-decoration: none; overflow-wrap: anywhere; }
+a.g-name:hover { text-decoration: underline; }
+.g-when { font-size: .8125rem; color: var(--ink-soft); }
+.g-stars { margin: 2px 0 0; color: #B8741A; letter-spacing: 1px; font-size: 1rem; }
+.quotes .g-review blockquote { padding-top: 0; }
+.quotes .g-review blockquote p { font-size: 1rem; font-weight: 400; margin: 0; white-space: pre-line; }
+.g-text.is-clamped {
+  display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden;
+}
+.g-more {
+  align-self: flex-start; padding: 4px 0; border: 0; background: none; cursor: pointer;
+  font: 700 .875rem/1.4 var(--font-body); color: var(--terracotta-dark); text-decoration: underline;
+}
+.g-more[hidden] { display: none; }
+
+.g-photos { margin: 8px 0 20px; }
+.g-photos[hidden] { display: none; }
+.g-photos h3 { color: var(--white); font-size: 1.25rem; }
+.g-photo-list {
+  list-style: none; margin: 0; padding: 0 0 8px;
+  display: grid; grid-auto-flow: column; grid-auto-columns: 62%; gap: 12px;
+  overflow-x: auto; scroll-snap-type: x mandatory;
+}
+@media (min-width: 720px) { .g-photo-list { grid-auto-flow: row; grid-template-columns: repeat(3, 1fr); overflow: visible; } }
+.g-photo-list li { scroll-snap-align: start; min-width: 0; }
+.g-photo-list img {
+  width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 12px;
+  background: rgba(255, 255, 255, .15);
+}
+.g-photo-by { margin: 6px 0 0; font-size: .8125rem; overflow-wrap: anywhere; }
+.g-photo-by a, .g-attrib a { color: var(--white); font-weight: 600; }
+.g-attrib { font-size: .875rem; margin: 0 0 16px; }
+.g-attrib[hidden] { display: none; }
 
 /* ---------- Visit ---------- */
 .visit-grid { display: grid; gap: 32px; }
